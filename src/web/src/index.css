@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Theme palette for the web operator UI. Mirrors the desktop renderer's `flat`
+ * theme tokens so the same Tailwind color utilities (bg-0..3, edge, accent,
+ * text-*) read identically across surfaces. Channels are space-separated RGB
+ * so Tailwind's `/opacity` modifiers keep working.
+ */
+:root {
+  --bg-0: 10 10 11;
+  --bg-1: 17 17 19;
+  --bg-2: 22 22 24;
+  --bg-3: 29 29 32;
+  --edge: 38 38 43;
+  --edge-mid: 44 44 51;
+  --edge-active: 58 58 68;
+  --accent: 139 124 246;
+  --accent-blue: 37 99 235;
+  --success: 61 220 151;
+  --accent-green: 61 220 151;
+  --accent-cyan: 50 212 222;
+  --accent-purple: 139 124 246;
+  --warn: 245 158 11;
+  --danger: 248 113 113;
+  --text-hi: 245 245 247;
+  --text-mid: 161 161 170;
+  --text-low: 107 107 118;
+  --text-hint: 74 74 85;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  html {
+    background: rgb(var(--bg-0));
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', Inter, system-ui, sans-serif;
+    background: rgb(var(--bg-0));
+    color: rgb(var(--text-hi));
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* Respect device notches on phones. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .selectable,
+  input,
+  textarea,
+  select {
+    user-select: text;
+  }
+}
+
+@layer utilities {
+  /* Thin, dark scrollbars to match the operator surface. */
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--edge-active)) transparent;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: rgb(var(--edge-active));
+    border-radius: 4px;
+  }
+}

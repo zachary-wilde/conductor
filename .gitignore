@@ -1,0 +1,21 @@
+node_modules/
+out/
+dist/
+.vite/
+*.log
+.DS_Store
+conductor-data/
+.firecrawl/
+_run.err
+_run.log
+.tmp/
+
+# Agent process artifacts — never published (see CLAUDE.md publishing gate).
+codex-out-*.txt
+
+# Repo-root APK copies are build artifacts (the signed source lives under android/app/build/outputs).
+*.apk
+
+# Internal handoffs and agent briefs — working notes, NEVER published.
+HANDOFF*.md
+COORDINATION.md

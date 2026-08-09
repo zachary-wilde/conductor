@@ -1,0 +1,620 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* Allow text selection in editors and terminals. */
+  .xterm,
+  .monaco-editor,
+  .selectable {
+    user-select: text;
+  }
+}
+
+/* --- Themes ---------------------------------------------------------------
+ * Two independent axes:
+ *   data-theme   = palette (`flat`, `terminal`)
+ *   data-acrylic = translucency (`on` / absent)
+ * Channels are space-separated RGB so Tailwind `/opacity` modifiers work. */
+:root,
+:root[data-theme='flat'] {
+  --glass-tint: 10 10 11;
+  --conversation-bg: 10 10 11;
+  --bg-0: 10 10 11;
+  --bg-1: 17 17 19;
+  --bg-2: 22 22 24;
+  --bg-3: 29 29 32;
+  --edge: 38 38 43;
+  --edge-mid: 44 44 51;
+  --edge-active: 58 58 68;
+  --accent: 139 124 246;
+  --accent-blue: 37 99 235;
+  --success: 61 220 151;
+  --accent-green: var(--success); /* compatibility alias during migration */
+  --accent-cyan: 50 212 222;
+  --accent-purple: 139 124 246;
+  --text-hi: 245 245 247;
+  --text-mid: 161 161 170;
+  --text-low: 107 107 118;
+  --text-hint: 74 74 85;
+}
+
+/* Terminal: mirrors the user's Windows Terminal exactly.
+ *   surface  = background #38315C, one uniform colour for every pane
+ *   alpha    = opacity 29 -> 0.29, applied uniformly (see --glass below)
+ *   text     = omp dark-terminal truecolor literals; pink is statusLine 205 */
+:root[data-theme='terminal'] {
+  --bg-0: 56 49 92;
+  --bg-1: 56 49 92;
+  --bg-2: 66 58 108;
+  --bg-3: 48 42 80;
+  --edge: 0 170 255;
+  --edge-mid: 74 66 118;
+  --edge-active: 0 255 0;
+  --accent: 139 124 246;
+  --accent-blue: 0 170 255;
+  --success: 0 204 0;
+  --accent-green: var(--success);
+  --accent-cyan: 0 255 204;
+  --accent-purple: 139 124 246;
+  --accent-yellow: 255 255 0;
+  --accent-red: 255 0 0;
+  --text-hi: 241 241 241;
+  --text-mid: 204 204 204;
+  --text-low: 130 124 168;
+  --text-hint: 110 104 148;
+  --glass-tint: 56 49 92;
+  --conversation-bg: 56 49 92;
+}
+
+/* Opaque by default: surfaces are solid and the window paints its own base. */
+:root {
+  --surface-plate: rgb(var(--bg-1));
+  --surface-panel: rgb(var(--bg-1));
+  --surface-blur: none;
+  --app-base: rgb(var(--bg-0));
+  --backdrop-base: rgb(var(--bg-0));
+  --backdrop-image: none;
+  --grain-opacity: 0;
+}
+
+/* Glass. `--glass` is 0-100 from settings; every alpha and the blur radius are
+ * derived from it so one slider moves the whole treatment coherently. */
+:root[data-acrylic='on'] {
+  /* No in-app wallpaper. The OS acrylic samples the real desktop behind the window,
+   * exactly like Windows Terminal's `useAcrylic`. Painting a gradient here would sit on
+   * top of that and hide the very thing the effect exists to show. */
+  --wallpaper: none;
+  --glass: 71;
+  --plate-alpha: calc(1 - var(--glass) / 100);
+  --panel-alpha: calc(1 - var(--glass) / 100);
+  --base-alpha: calc(1 - var(--glass) / 100);
+  --surface-plate: rgb(var(--bg-1) / var(--plate-alpha));
+  --surface-panel: rgb(var(--bg-1) / var(--panel-alpha));
+  /* Saturation is what separates acrylic from a plain dark scrim: the blur alone
+   * greys everything out, the saturate() pushes the wallpaper's colour back through. */
+  --surface-blur: blur(34px) saturate(190%) brightness(1.06);
+  --app-base: transparent;
+  /* Transparent, deliberately. The OS acrylic already applies its own tint to the
+   * desktop it samples (TINT_ABGR in main/acrylic.ts). Painting a second tinted plane
+   * here stacks on top of it, which both darkens the result and pushes the theme's
+   * colour over everything — the window stops looking like glass and starts looking
+   * like a coloured sheet. Let the compositor own the tint; panels add their own. */
+  --backdrop-base: transparent;
+  /* The wallpaper is an in-app asset, not the desktop. Desktop acrylic shows whatever
+   * happens to be behind the window, so it can never compose reliably. This is only
+   * lightly blurred on purpose — the panels' own backdrop-filter needs sharp structure
+   * underneath to work against, or the glass reads flat. */
+  --backdrop-image: var(--wallpaper, none);
+  --backdrop-size: cover;
+  --grain-opacity: 0.14;
+  --conversation-alpha: calc(1 - var(--glass) / 100);
+}
+
+.conversation-surface {
+  background-color: rgb(var(--conversation-bg) / var(--conversation-alpha, 1));
+}
+
+/**
+ * `--window-radius` must match WINDOW_CORNER_RADIUS in main/window-corners.ts.
+ *
+ * Windows 10 clips the window to a rounded REGION, which has no anti-aliasing.
+ * Painting the same radius here puts a smooth CSS edge just inside the hard
+ * clip, which is what hides the stair-stepping. On Windows 11 DWM rounds the
+ * window itself and this simply agrees with it.
+ */
+:root {
+  --window-radius: 10px;
+}
+
+.app-base {
+  background-color: var(--app-base);
+  border-radius: var(--window-radius);
+  overflow: hidden;
+}
+
+#root {
+  position: relative;
+  isolation: isolate;
+}
+
+#root::before,
+#root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+#root::before {
+  background-color: var(--backdrop-base);
+  background-image: var(--backdrop-image);
+  background-size: var(--backdrop-size, cover);
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Fine grain keeps large translucent planes from banding. */
+#root::after {
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+
+:root {
+  --glass: 71;
+
+  --glass-panel-bg: rgb(var(--bg-1));
+  --glass-modal-bg: rgb(var(--bg-1));
+  --glass-control-bg: rgb(var(--bg-0));
+  --glass-inset-bg: rgb(var(--bg-2));
+  --glass-border: rgb(var(--edge));
+  --glass-divider: rgb(var(--edge));
+  --glass-hover: rgb(var(--bg-2));
+  --glass-filter: none;
+
+  --glass-panel-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.035),
+    0 16px 40px rgb(0 0 0 / 0.35);
+  --glass-modal-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 28px 80px rgb(0 0 0 / 0.65);
+
+  --modal-scrim: rgb(0 0 0 / 0.55);
+  --modal-scrim-filter: none;
+}
+
+:root[data-acrylic='on'] {
+  /* At intensity 71: panel .382, modal .458, control .616. */
+  --glass-panel-alpha: calc(0.78 - var(--glass) * 0.0056);
+  --glass-modal-alpha: calc(0.82 - var(--glass) * 0.0051);
+  --glass-control-alpha: calc(0.90 - var(--glass) * 0.004);
+
+  --glass-panel-bg:
+    rgb(var(--glass-tint) / var(--glass-panel-alpha));
+  --glass-modal-bg:
+    rgb(var(--glass-tint) / var(--glass-modal-alpha));
+  --glass-control-bg:
+    rgb(var(--glass-tint) / var(--glass-control-alpha));
+  --glass-inset-bg: rgb(var(--glass-tint) / 0.22);
+  --glass-border: rgb(255 255 255 / 0.10);
+  --glass-divider: rgb(255 255 255 / 0.07);
+  --glass-hover: rgb(255 255 255 / 0.055);
+  --glass-filter:
+    blur(calc(18px + var(--glass) * 0.31px))
+    saturate(150%);
+
+  --glass-panel-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.10),
+    0 20px 54px rgb(0 0 0 / 0.55);
+  --glass-modal-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    0 32px 90px rgb(0 0 0 / 0.70);
+
+  --modal-scrim: rgb(2 5 10 / 0.32);
+  --modal-scrim-filter: saturate(85%) brightness(88%);
+}
+
+@layer components {
+  .glass-panel,
+  .card {
+    @apply rounded-[14px] border;
+    border-color: var(--glass-border);
+    background: var(--glass-panel-bg);
+    box-shadow: var(--glass-panel-shadow);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+  }
+
+  .glass-modal {
+    @apply rounded-[14px] border;
+    border-color: var(--glass-border);
+    background: var(--glass-modal-bg);
+    box-shadow: var(--glass-modal-shadow);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+  }
+
+  .acrylic {
+    background: var(--glass-panel-bg);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+  }
+
+  .terminal-surface {
+    border: 1px solid var(--glass-border);
+    background: var(--glass-panel-bg);
+    box-shadow: var(--glass-panel-shadow);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+  }
+
+  .glass-divider {
+    border-color: var(--glass-divider);
+  }
+
+  /**
+   * A band INSIDE a plate — a view header, a tab strip, a composer footer.
+   *
+   * These were `.glass-panel` with their corners and three borders switched off,
+   * which still painted a second tint and a second 40px blur on top of the plate
+   * they sit in. Two stacked glass layers read as muddy grey, not glass. A band
+   * borrows the plate's translucency and contributes only a divider.
+   */
+  .glass-bar {
+    background: transparent;
+    border-color: var(--glass-divider);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  /**
+   * For bands that content scrolls underneath — sticky composers and save bars.
+   * A faint wash keeps them legible without a second blur.
+   */
+  .glass-bar--raised {
+    background: var(--glass-inset-bg);
+  }
+
+  .glass-pill {
+    @apply inline-flex h-[27px] items-center gap-1.5 rounded-lg border px-2.5
+      text-[11.5px] text-text-mid transition-colors;
+    border-color: var(--glass-border);
+    background: var(--glass-panel-bg);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.10);
+    backdrop-filter: var(--glass-filter);
+    -webkit-backdrop-filter: var(--glass-filter);
+  }
+
+  .glass-pill:hover {
+    border-color: rgb(255 255 255 / 0.20);
+    background: var(--glass-hover);
+  }
+
+  .glass-input,
+  .input {
+    @apply w-full rounded-lg border px-3 py-2 text-sm text-text-hi
+      placeholder:text-text-hint transition-colors
+      disabled:cursor-not-allowed disabled:opacity-40;
+    min-height: 36px;
+    color-scheme: dark;
+    border-color: var(--glass-border);
+    background: var(--glass-control-bg);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+  }
+
+  .glass-input:hover,
+  .input:hover {
+    border-color: rgb(255 255 255 / 0.17);
+  }
+
+  .glass-input:focus,
+  .input:focus {
+    border-color: rgb(var(--accent) / 0.75);
+    box-shadow:
+      0 0 0 3px rgb(var(--accent) / 0.14),
+      inset 0 1px 0 rgb(255 255 255 / 0.05);
+    outline: none;
+  }
+
+  select.glass-input option,
+  select.input option {
+    color: rgb(var(--text-hi));
+    background: rgb(var(--bg-1));
+  }
+
+  .glass-segment {
+    @apply flex gap-1 rounded-lg border p-1;
+    border-color: var(--glass-divider);
+    background: var(--glass-inset-bg);
+  }
+
+  .glass-segment__button {
+    @apply flex flex-1 items-center justify-center gap-1.5 rounded-md px-2
+      py-1.5 text-xs font-medium text-text-low transition-colors;
+  }
+
+  .glass-segment__button:hover {
+    color: rgb(var(--text-mid));
+    background: var(--glass-hover);
+  }
+
+  .glass-segment__button[aria-pressed='true'] {
+    color: rgb(var(--text-hi));
+    background: rgb(var(--accent) / 0.20);
+    box-shadow:
+      inset 0 0 0 1px rgb(var(--accent) / 0.38),
+      0 3px 12px rgb(0 0 0 / 0.20);
+  }
+
+  .glass-choice {
+    @apply rounded-lg border transition-colors;
+    border-color: var(--glass-border);
+    background: rgb(255 255 255 / 0.025);
+  }
+
+  .glass-choice:hover {
+    border-color: rgb(255 255 255 / 0.18);
+    background: var(--glass-hover);
+  }
+
+  .glass-choice[aria-pressed='true'] {
+    border-color: rgb(var(--accent) / 0.60);
+    background: rgb(var(--accent) / 0.13);
+    box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.10);
+  }
+
+  .modal-scrim {
+    background: var(--modal-scrim);
+    backdrop-filter: var(--modal-scrim-filter);
+    -webkit-backdrop-filter: var(--modal-scrim-filter);
+  }
+
+  .dense-surface {
+    border-color: rgb(255 255 255 / 0.065);
+    background: rgb(var(--bg-0));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-1.5
+      text-sm font-medium transition-colors disabled:cursor-not-allowed
+      disabled:opacity-40;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-white hover:opacity-90;
+    box-shadow: 0 5px 18px rgb(var(--accent) / 0.34);
+  }
+
+  .btn-ghost {
+    @apply btn text-text-mid hover:text-text-hi;
+  }
+
+  .btn-ghost:hover {
+    background: var(--glass-hover);
+  }
+
+  .btn-outline {
+    @apply btn border text-text-mid hover:text-text-hi;
+    border-color: var(--glass-border);
+  }
+
+  .btn-outline:hover {
+    border-color: rgb(255 255 255 / 0.18);
+    background: var(--glass-hover);
+  }
+
+  .label {
+    @apply font-mono text-[11px] uppercase tracking-wider text-text-low;
+  }
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--edge-mid));
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--edge-active));
+  background-clip: padding-box;
+}
+
+/* xterm fills its container */
+.xterm,
+.xterm-screen {
+  padding: 0;
+  margin: 0;
+}
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/**
+ * Workspace shell: the same floating-glass language as the dashboard.
+ *
+ * The rails used to be docked edge to edge with hairline borders, so opening a
+ * session dropped you into what looked like a different application. They are
+ * plates now, inset by one gutter and separated by another, with the desktop
+ * visible between them. The panels supply their own glass via `.glass-panel`;
+ * this file owns only the geometry.
+ */
+.workspace-shell {
+  --shell-gutter: 14px;
+  position: relative;
+  display: grid;
+  gap: var(--shell-gutter);
+  padding: var(--shell-gutter);
+  min-width: 960px;
+  /* Sized by the flex column beneath the title bar; 100vh overflowed by its height. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-shell__projects {
+  grid-column: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.workspace-shell__center {
+  grid-column: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-shell__sessions {
+  grid-column: 3;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/**
+ * The drag seam lives in the gutter between two plates, not on a panel edge.
+ * `--seam-at` is the panel's width; the gutter offsets account for the shell's
+ * own padding and then centre the seam in the gap.
+ */
+.workspace-shell__seam {
+  --seam-width: 6px;
+  position: absolute;
+  top: var(--shell-gutter);
+  bottom: var(--shell-gutter);
+  width: var(--seam-width);
+  border-radius: 999px;
+}
+
+.workspace-shell__seam--right {
+  left: calc(var(--shell-gutter) + var(--seam-at) + (var(--shell-gutter) - var(--seam-width)) / 2);
+}
+
+.workspace-shell__seam--left {
+  right: calc(var(--shell-gutter) + var(--seam-at) + (var(--shell-gutter) - var(--seam-width)) / 2);
+}
+
+.workspace-shell__sessions-toggle {
+  display: none;
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  bottom: auto;
+  left: auto;
+  z-index: 41;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--edge));
+  background: var(--surface-plate);
+  backdrop-filter: var(--surface-blur);
+  color: rgb(var(--text-mid));
+}
+.workspace-shell__sessions-toggle:hover {
+  color: rgb(var(--text-hi));
+  border-color: rgb(var(--edge-active));
+}
+
+.session-rail__close {
+  display: none;
+}
+
+.session-inspector-host {
+  position: relative;
+  z-index: 20;
+}
+
+@media (max-width: 1279px) {
+  .session-inspector-host {
+    position: fixed;
+    top: 48px;
+    right: 300px;
+    bottom: 0;
+    box-shadow: -16px 0 40px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+
+@media (max-width: 1099px) {
+  .session-inspector-host {
+    right: 0;
+  }
+}
+
+@media (max-width: 1099px) {
+  .workspace-shell {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+  .workspace-shell__projects {
+    width: 56px;
+  }
+  .workspace-shell__sessions {
+    display: none;
+  }
+  /* Still a floating plate when it slides in, not a slab bolted to the edge. */
+  .workspace-shell__sessions--open {
+    display: flex;
+    position: fixed;
+    top: calc(36px + var(--shell-gutter));
+    right: var(--shell-gutter);
+    bottom: var(--shell-gutter);
+    width: min(340px, 90vw);
+    z-index: 40;
+    box-shadow: -16px 0 40px -12px rgba(0, 0, 0, 0.6);
+  }
+  .workspace-shell__sessions-toggle {
+    display: inline-flex;
+  }
+  .session-rail__close {
+    display: inline-flex;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

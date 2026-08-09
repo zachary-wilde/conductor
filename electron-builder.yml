@@ -1,0 +1,68 @@
+# Reigen — Windows NSIS installer (per-user, no admin elevation)
+# Mirrors the electron-vite electron-builder template, adapted to this app.
+appId: com.reigen.app
+productName: Reigen
+directories:
+  output: dist
+  buildResources: build
+
+# Default base is "**/*" (ships out/**, package.json, and the production-pruned
+# node_modules); the entries below only *exclude* repo junk so the asar stays clean.
+files:
+  - "!**/.vscode/*"
+  - "!**/.DS_Store"
+  - "!src"
+  - "!src/**"
+  - "!android"
+  - "!android/**"
+  - "!scripts"
+  - "!scripts/**"
+  - "!docs"
+  - "!docs/**"
+  - "!.tmp"
+  - "!.tmp/**"
+  - "!.agents"
+  - "!.agents/**"
+  - "!*.config.*"
+  - "!electron.vite.config.{js,ts,mjs,cjs}"
+  - "!tsconfig*"
+  - "!capacitor.config.ts"
+  - "!*.md"
+  - "!codex-out-*.txt"
+  - "!HANDOFF-*.md"
+  - "!*.bat"
+  - "!conductor*.apk"
+  - "!*.7z"
+  - "!{.env,.env.*,package-lock.json}"
+  - "!**/*.{ts,tsx,cts,mts}"
+  - "!**/*.test.{js,ts,jsx,tsx}"
+  - "!**/*.spec.{js,ts,jsx,tsx}"
+  - "!**/*.test-d.{ts,tsx}"
+  - "!**/__tests__/**"
+  - "!**/__mocks__/**"
+
+# Native binaries (node-pty, koffi) must load from disk, not from inside the asar.
+asarUnpack:
+  - "**/*.{node,dll}"
+
+# Rebuild node-pty / koffi against Electron 31 via @electron/rebuild.
+# No source rebuild: node-pty (node-addon-api) and koffi (N-API v8) ship
+# ABI-stable prebuilt binaries that load under Electron 31 unchanged — the app
+# already runs against them. This host also has no VS C++ Build Tools, so an
+# @electron/rebuild (node-gyp) of node-pty cannot compile. npmRebuild:false
+# packages the existing, working prebuilts as-is.
+npmRebuild: false
+
+# Local packaging only — never auto-publish. electron-builder detects CI and
+# otherwise tries to publish to a GitHub draft release (exit 1 on missing GH_TOKEN).
+publish: null
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  include: build/uninstaller.nsh
