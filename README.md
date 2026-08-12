@@ -28,6 +28,12 @@ never required.
 > harness has done real work yet, and the remote operator has not run on a physical phone. See
 > [Honest status](#honest-status).
 
+## Screenshots
+
+![Reigen](docs/screenshots/reigen-screenshot-1.png)
+![Reigen](docs/screenshots/reigen-screenshot-2.png)
+![Reigen](docs/screenshots/reigen-screenshot-3.png)
+
 ## Security & execution model
 
 See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md) before running agents. Agents run at
