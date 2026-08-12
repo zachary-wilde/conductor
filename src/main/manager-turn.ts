@@ -212,7 +212,7 @@ export function buildManagerContext(input: ManagerContextInput): ManagerContext 
     '',
     '=== RUNTIME ===',
     `repository: ${input.ravel.repoPath}`,
-    `status: ${input.ravel.status}; max concurrent children: ${input.ravel.maxChildren}`,
+    'status: ' + input.ravel.status + '; child scheduling: adaptive internal capacity',
     `available harnesses: ${input.availableHarnesses.join(', ') || '(none)'}`,
     '',
     '=== CURRENT PLAN ===',

@@ -222,9 +222,9 @@ export function RoundtableView({ roundtableId }: { roundtableId?: string } = {})
                       className="btn-primary"
                       onClick={() => void sendToRavel()}
                       disabled={busy || !ravelHarness}
-                      title={!ravelHarness ? 'No harness is available for a new Ravel' : undefined}
+                      title={!ravelHarness ? 'No harness is available for a new Reigen' : undefined}
                     >
-                      <Sparkles size={14} /> Send to Ravel
+                      <Sparkles size={14} /> Send to Reigen
                     </button>
                   </div>
                 )}

@@ -1,34 +1,10 @@
+@import '../../shared/ui-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/*
- * Theme palette for the web operator UI. Mirrors the desktop renderer's `flat`
- * theme tokens so the same Tailwind color utilities (bg-0..3, edge, accent,
- * text-*) read identically across surfaces. Channels are space-separated RGB
- * so Tailwind's `/opacity` modifiers keep working.
- */
-:root {
-  --bg-0: 10 10 11;
-  --bg-1: 17 17 19;
-  --bg-2: 22 22 24;
-  --bg-3: 29 29 32;
-  --edge: 38 38 43;
-  --edge-mid: 44 44 51;
-  --edge-active: 58 58 68;
-  --accent: 139 124 246;
-  --accent-blue: 37 99 235;
-  --success: 61 220 151;
-  --accent-green: 61 220 151;
-  --accent-cyan: 50 212 222;
-  --accent-purple: 139 124 246;
-  --warn: 245 158 11;
-  --danger: 248 113 113;
-  --text-hi: 245 245 247;
-  --text-mid: 161 161 170;
-  --text-low: 107 107 118;
-  --text-hint: 74 74 85;
-}
+/* WebView-specific base styles. */
 
 @layer base {
   html,
@@ -74,5 +50,59 @@
   .scroll-thin::-webkit-scrollbar-thumb {
     background: rgb(var(--edge-active));
     border-radius: 4px;
+  }
+}
+
+/* Windows-inspired tablet canvas: a quiet rail and one raised work surface
+   keep the live route readable without changing the phone's stacked flow.
+   Body and BottomNav already reserve the safe-area inset; the shell only
+   reserves the optional virtual-keyboard inset. */
+.tablet-canvas-shell {
+  padding-bottom: env(keyboard-inset-height, 0px);
+}
+
+.tablet-canvas-surface {
+  background: rgb(var(--bg-0));
+}
+
+@media (min-width: 768px) {
+  .tablet-canvas-shell {
+    gap: 12px;
+    padding: 12px;
+    padding-bottom: calc(12px + env(keyboard-inset-height, 0px));
+    background: rgb(var(--bg-0));
+  }
+
+  .tablet-canvas-shell > nav[aria-label='Tablet navigation'] {
+    border: 1px solid rgb(var(--edge));
+    border-radius: 14px;
+    background: rgb(var(--bg-1));
+  }
+
+  .tablet-canvas-shell > main {
+    gap: 12px;
+  }
+
+  .tablet-canvas-topbar {
+    border: 1px solid rgb(var(--edge));
+    border-radius: 14px;
+    background: rgb(var(--bg-1) / 0.92);
+  }
+
+  .tablet-canvas-content {
+    min-height: 0;
+  }
+
+  .tablet-canvas-surface {
+    border: 1px solid rgb(var(--edge));
+    border-radius: 14px;
+    background: rgb(var(--bg-1));
+    box-shadow: 0 12px 32px -24px rgb(var(--accent) / 0.45);
+  }
+}
+
+@media (max-width: 767px) {
+  .tablet-canvas-shell > main {
+    min-height: 0;
   }
 }

@@ -6,6 +6,7 @@ import { applyWindowCorners } from './window-corners'
 import { connectOrSpawnCore, type ConnectOrSpawnOptions } from './core-client'
 import { syncAutostart, isBackgroundLaunch } from './autostart'
 import { createCoreConnection, type CoreConnection, type CoreStatus } from './core-connection'
+import { initializeUpdater, getUpdaterStatus, subscribeUpdater, checkForUpdaterUpdates, downloadUpdaterUpdate, installUpdaterUpdate } from './updater'
 import type { Settings } from '@shared/types'
 
 // Electron is now a THIN CLIENT of the standalone Conductor Core. It owns no
@@ -183,7 +184,7 @@ const PROXIED_CHANNELS = [
   'worktree:list', 'worktree:create', 'worktree:remove',
   'merge:preview', 'merge:land', 'merge:deleteBranch',
   'harness:detect', 'harness:modelCatalogues',
-  'session:create', 'session:list', 'session:write', 'session:resize', 'session:kill',
+  'session:create', 'session:list', 'session:write', 'session:resize', 'session:kill', 'session:snapshot',
   'settings:get', 'settings:loadError',
   'system:readFile', 'system:writeFile', 'fs:listDir',
   'operations:pairing',
@@ -262,6 +263,14 @@ function registerIpc(conn: CoreConnection): void {
   ipcMain.handle('core:reconnect', () => {
     conn.reconnect()
   })
+
+  ipcMain.handle('updater:status', () => getUpdaterStatus())
+  ipcMain.handle('updater:check', () => checkForUpdaterUpdates())
+  ipcMain.handle('updater:download', () => downloadUpdaterUpdate())
+  ipcMain.handle('updater:install', (_e, confirmWithActiveSessions = false) =>
+    installUpdaterUpdate(confirmWithActiveSessions)
+  )
+  subscribeUpdater((next) => send('updater:status', next))
 }
 
 // Smoke isolation must happen before anything resolves a userData path; the base
@@ -334,6 +343,14 @@ app.whenReady().then(async () => {
     }
   })
   registerIpc(coreConn)
+  initializeUpdater(async () => {
+    try {
+      const sessions = await coreConn?.call<Array<{ status?: string }>>('session:list')
+      return sessions?.some((session) => session.status === 'running') === true
+    } catch {
+      return false
+    }
+  })
   coreConn.start()
 
   createWindow()

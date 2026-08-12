@@ -137,7 +137,7 @@ export function AutomationsView(): JSX.Element {
       ) : null}
 
       {items !== null && items.length === 0 ? (
-        <EmptyState title="No automations" body="Define a schedule to wake a session or launch a Ravel on a cron." />
+        <EmptyState title="No automations" body="Define a schedule to wake a session or launch an Orchestrator on a cron." />
       ) : null}
 
       {items?.map((item) => (

@@ -104,7 +104,7 @@ export function WorkPanel(): JSX.Element {
       <div className="flex shrink-0 justify-end gap-1.5 px-2 pt-2">
         <>
             <PanelAction
-              label="New Ravel orchestrator"
+              label="New Reigen"
               testId="new-ravel"
               icon={<Sparkles size={11} />}
               disabled={repos.length === 0}

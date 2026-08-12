@@ -10,15 +10,14 @@ import { CoreProvider, useCore } from './state/coreContext'
 import { TimelineProvider } from './state/timeline'
 import { useRoute } from './state/router'
 import type { Route } from './state/router'
-import { BottomNav, SideRail } from './components/Navigation'
-import { TopBar } from './components/TopBar'
-import { RateLimitBanner } from './components/RateLimitBanner'
+import { TabletCanvas } from './components/TabletCanvas'
 import { ConnectScreen } from './components/ConnectScreen'
 import { TimelineView } from './views/TimelineView'
 import { WorkersView } from './views/WorkersView'
 import { WorkerDetailView } from './views/WorkerDetailView'
 import { AutomationsView } from './views/AutomationsView'
 import { ReviewView } from './views/ReviewView'
+import { RuntimeView } from './views/RuntimeView'
 import { Spinner } from './components/ui'
 import type { ReactNode } from 'react'
 
@@ -69,15 +68,9 @@ function BootScreen({ booting, apiBase }: { booting: boolean; apiBase: string })
 function ShellLayout(): JSX.Element {
   const [route, navigate] = useRoute()
   return (
-    <div className="flex h-full flex-col-reverse md:flex-row">
-      <BottomNav route={route} navigate={navigate} />
-      <SideRail route={route} navigate={navigate} />
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <TopBar />
-        <RateLimitBanner />
-        <div className="flex min-h-0 flex-1 flex-col">{renderView(route, navigate)}</div>
-      </main>
-    </div>
+    <TabletCanvas route={route} navigate={navigate}>
+      {renderView(route, navigate)}
+    </TabletCanvas>
   )
 }
 
@@ -120,6 +113,12 @@ function renderView(route: Route, navigate: (r: Route) => void): JSX.Element {
       return (
         <ViewScroll>
           <ReviewView />
+        </ViewScroll>
+      )
+    case 'runtime':
+      return (
+        <ViewScroll>
+          <RuntimeView />
         </ViewScroll>
       )
   }

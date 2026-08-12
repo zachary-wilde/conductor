@@ -180,6 +180,14 @@ export function createBackend(opts: CoreBackendOptions): CoreBackend {
     scheduler: {
       defaultHarness: 'claude',
       createRavel: async (request) => {
+        const existing = ravel.listRavel().find((candidate) => candidate.repoId === request.repoId)
+        if (existing) {
+          if (request.initialInstruction) {
+            const wake = await ravel.sendMessage(existing.id, request.initialInstruction, store.getSettings())
+            if (!wake || !wake.ok) return { ravelId: existing.id, error: wake?.error.message ?? wake?.error.code }
+          }
+          return { ravelId: existing.id }
+        }
         const result = await ravel.createRavel(request, store.getSettings())
         return result.ok ? { ravelId: result.ravel.id } : { ravelId: null, error: result.error.message ?? result.error.code }
       },
@@ -215,7 +223,7 @@ export function createBackend(opts: CoreBackendOptions): CoreBackend {
   function bindEmit(next: EmitFn): void {
     emit = next
     sessions.setSessionEvents({
-      data: (id, data) => emit('pty:data', id, data),
+      data: (id, data, generation) => emit('pty:data', id, data, generation),
       created: () => syncActivityWatch(),
       exit: (id, result) => {
         const session = sessions.getSession(id)
@@ -360,6 +368,7 @@ export function createBackend(opts: CoreBackendOptions): CoreBackend {
     'session:write': (id, data) => sessions.writeToSession(id as string, data as string),
     'session:resize': (id, cols, rows) => sessions.resizeSession(id as string, cols as number, rows as number),
     'session:kill': (id) => sessions.killSession(id as string),
+    'session:snapshot': (id) => (typeof id === 'string' ? sessions.snapshotSession(id) : null),
 
     'settings:get': () => store.getSettings(),
     'settings:save': (patch) => store.saveSettings(patch as Partial<Settings>),
@@ -405,6 +414,19 @@ export function createBackend(opts: CoreBackendOptions): CoreBackend {
       if (!parsed.ok) return invalidRavelRequest(parsed.error)
       if (!(await git.isRepo(parsed.value.repoPath))) {
         return { ok: false, error: { code: 'invalid-repository', message: 'Repository is not available.' } }
+      }
+      const existing = ravel.listRavel().find((candidate) => candidate.repoId === parsed.value.repoId)
+      if (existing) {
+        // A second Reigen for the same repo reuses the singleton. The operator's
+        // initial instruction is delivered as a wake-up message, mirroring the
+        // operations path — silently dropping it would lose typed input.
+        if (parsed.value.initialInstruction) {
+          const woken = await ravel.sendMessage(existing.id, parsed.value.initialInstruction, store.getSettings())
+          if (!woken) return { ok: false, error: { code: 'ravel-missing', message: 'Existing Reigen could not be reached.' } }
+          if (!woken.ok) return woken
+          return woken
+        }
+        return { ok: true, ravel: existing }
       }
       return ravel.createRavel(parsed.value, store.getSettings())
     },

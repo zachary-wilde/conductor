@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest'
 import React from 'react'
 import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { DEFAULT_SETTINGS } from '@shared/types'
 import { installApi, resetStore } from '../lib/testStubs'
 import { useStore } from '../store/useStore'
@@ -115,5 +115,29 @@ describe('Settings sign-in autostart toggle', () => {
     await user.click(screen.getByTestId('settings-save'))
 
     expect(window.api.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ autostart: true }))
+  })
+})
+describe('Settings updater controls', () => {
+  test('checks for updates from the release section', async () => {
+    const user = userEvent.setup()
+    render(<SettingsView />)
+
+    await user.click(screen.getByTestId('check-for-updates'))
+
+    expect(window.api.checkForUpdates).toHaveBeenCalledOnce()
+  })
+  test('passes explicit confirmation before installing a downloaded update', async () => {
+    const installUpdate = vi.fn().mockResolvedValue({ state: 'downloaded', version: '0.2.0' })
+    installApi({
+      updaterStatus: vi.fn().mockResolvedValue({ state: 'downloaded', version: '0.2.0' }),
+      installUpdate
+    })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    const user = userEvent.setup()
+    render(<SettingsView />)
+
+    await user.click(await screen.findByTestId('install-update'))
+
+    expect(installUpdate).toHaveBeenCalledWith(true)
   })
 })

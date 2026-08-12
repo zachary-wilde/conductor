@@ -2,6 +2,7 @@
  * Ravel — a conversation-owned orchestration runtime for parallel coding sessions.
  */
 import { randomBytes, randomUUID } from 'node:crypto'
+import { availableParallelism } from 'node:os'
 import { mkdirSync, readFileSync, unlinkSync, watch, writeFileSync, type FSWatcher } from 'node:fs'
 import { join } from 'node:path'
 import * as sessions from './sessions'
@@ -168,10 +169,11 @@ export function setRavelRuntimeServicesForTest(overrides: Partial<RavelRuntimeSe
 interface RavelRuntime {
   cfg: RavelConfig
   queue: Promise<unknown>
+  /** Briefs accepted after approval but waiting for internal capacity. */
+  queuedBriefs: string[]
   invalidPlanAttempts: Map<string, number>
   /** Results of the tool batch the current turn just ran, fed back to the next turn. */
   turnResults: TurnResult[]
-  /** Cancels the in-flight headless turn when the Ravel is paused or deleted. */
   turnAbort: AbortController | undefined
   /** Per-child worktree watchers for the context-request channel, keyed by session id. */
   requestWatchers: Map<string, FSWatcher>
@@ -204,9 +206,19 @@ type PlanProposalPayload = {
 
 const runtimes = new Map<string, RavelRuntime>()
 const logs = new Map<string, RavelLogEntry[]>()
-
 const MAX_CHILDREN = new Set<number>([2, 4, 8, 16])
 const DEFAULT_MAX_CHILDREN = 8
+let internalChildCapacity = Math.max(2, Math.min(8, availableParallelism()))
+
+/**
+ * Test seam: pins the adaptive capacity so queue/drain coverage is host-
+ * independent. Production derives it from available parallelism; pass null to
+ * restore that derivation. Scheduling reads `internalChildCapacity`, never the
+ * host value directly.
+ */
+export function setInternalChildCapacityForTest(value: number | null): void {
+  internalChildCapacity = value === null ? Math.max(2, Math.min(8, availableParallelism())) : value
+}
 const MAX_LOG_ENTRIES = 500
 const MAX_CONVERSATION_MESSAGES = 200
 const FULL_CONTEXT_CHARS = 200_000
@@ -321,7 +333,11 @@ export function toPublicRavelConfig(cfg: RavelConfig): PublicRavelConfig {
   const cloned = cloneJson(cfg)
   // Archived dispatches stay in the stored config (insights/reattach see them)
   // but are hidden from every public projection — the fleet/worker views.
-  return { ...cloned, dispatches: cloned.dispatches.filter((d) => !d.archived) }
+  return {
+    ...cloned,
+    name: 'Reigen',
+    dispatches: cloned.dispatches.filter((d) => !d.archived)
+  }
 }
 
 function appendLog(
@@ -361,6 +377,7 @@ function ensureRuntime(cfg: RavelConfig): RavelRuntime {
   const rt: RavelRuntime = {
     cfg: cloneJson(cfg),
     queue: Promise.resolve(),
+    queuedBriefs: [],
     invalidPlanAttempts: new Map(),
     turnResults: [],
     turnAbort: undefined,
@@ -954,14 +971,6 @@ function invalidSourceKey(sourceMessageIds: string[]): string {
   return sourceMessageIds.length > 0 ? sourceMessageIds.slice().sort().join('\u0000') : '<missing-source>'
 }
 
-function spawnBlocker(rt: RavelRuntime): { code: string; message: string } | null {
-  if (rt.closing) return { code: 'ravel-closing', message: 'Ravel is closing.' }
-  if (rt.cfg.status !== 'running') {
-    return { code: 'ravel-not-running', message: 'Ravel must be running before spawning briefs.' }
-  }
-  return null
-}
-
 async function removeUntouchedWorktree(rt: RavelRuntime, worktreePath: string, branch: string): Promise<void> {
   try {
     await svc.removeWorktree(rt.cfg.repoPath, worktreePath, { force: true, deleteBranch: branch })
@@ -970,6 +979,22 @@ async function removeUntouchedWorktree(rt: RavelRuntime, worktreePath: string, b
   } catch (e) {
     appendLog(rt.cfg.id, 'warn', 'spawn-cleanup', `could not remove untouched worktree ${worktreePath}: ${msg(e)}`)
   }
+}
+
+function liveChildCount(rt: RavelRuntime): number {
+  let count = 0
+  for (const dispatch of rt.cfg.dispatches) {
+    if (LIVE_DISPATCH_STATUSES[dispatch.status]) count += 1
+  }
+  return count
+}
+
+function spawnBlocker(rt: RavelRuntime): { code: string; message: string } | null {
+  if (rt.closing) return { code: 'ravel-closing', message: 'Ravel is closing.' }
+  if (rt.cfg.status !== 'running') {
+    return { code: 'ravel-not-running', message: 'Ravel must be running before spawning briefs.' }
+  }
+  return null
 }
 
 async function toolSpawnChild(rt: RavelRuntime, call: Record<string, unknown>): Promise<void> {
@@ -989,6 +1014,10 @@ async function toolSpawnChild(rt: RavelRuntime, call: Record<string, unknown>): 
     return
   }
   const briefId = String(call.briefId ?? '').trim()
+  if (rt.queuedBriefs.includes(briefId)) {
+    toolResult(rt, { ok: true, queued: true, briefId, message: 'Brief is already queued for internal capacity.' })
+    return
+  }
   const harnessAvailability = await harnessAvailabilityRecord(svc.getSettings())
   const afterHarnessBlocked = spawnBlocker(rt)
   if (afterHarnessBlocked) {
@@ -1003,6 +1032,12 @@ async function toolSpawnChild(rt: RavelRuntime, call: Record<string, unknown>): 
   })
   if (!eligibility.ok) {
     toolResult(rt, { ok: false, error: eligibility.error })
+    return
+  }
+  if (liveChildCount(rt) >= internalChildCapacity) {
+    rt.queuedBriefs.push(briefId)
+    appendLog(rt.cfg.id, 'info', 'spawn-queued', `${briefId} queued; internal capacity is ${internalChildCapacity}`)
+    toolResult(rt, { ok: true, queued: true, briefId, message: 'Brief queued until internal capacity is available.' })
     return
   }
   if (budgetExceeded(rt.cfg, svc.getSettings())) {
@@ -1091,6 +1126,14 @@ async function toolSpawnChild(rt: RavelRuntime, call: Record<string, unknown>): 
     replaceDispatch(rt, dispatch, { status: 'failed' })
     appendLog(rt.cfg.id, 'error', 'spawn', `spawn failed for ${eligibility.brief.id}: ${msg(e)}`)
     toolResult(rt, { ok: false, error: { code: 'spawn-failed', message: msg(e) } })
+    await flushQueuedBriefs(rt)
+  }
+}
+async function flushQueuedBriefs(rt: RavelRuntime): Promise<void> {
+  while (!rt.closing && rt.cfg.status === 'running' && rt.queuedBriefs.length > 0 && liveChildCount(rt) < internalChildCapacity) {
+    const briefId = rt.queuedBriefs.shift()
+    if (!briefId) return
+    await toolSpawnChild(rt, { tool: 'spawn_child', briefId })
   }
 }
 
@@ -1510,7 +1553,7 @@ export async function createRavel(req: CreateRavelRequest, settings: Settings): 
   const now = Date.now()
   const cfg: RavelConfig = {
     id: randomUUID(),
-    name: req.name.trim() || 'Ravel',
+    name: 'Reigen',
     repoId: req.repoId,
     repoPath: req.repoPath,
     harness: req.harness,
@@ -1859,6 +1902,10 @@ export async function resumeRavel(id: string, settings: Settings): Promise<Publi
     saveConfig(rt, { ...rt.cfg, status, activity: 'thinking', error: null })
     appendLog(id, 'info', 'resume', 'Ravel resumed; interrupted children were not relaunched')
     await runManagerTurns(rt, settings, resumeDirective(rt.cfg))
+    // Pausing interrupts every live child, so capacity reopens on resume. Any
+    // brief that was queued (never started) before the pause would otherwise
+    // strand behind the already-queued guard forever — drain now that slots are free.
+    await flushQueuedBriefs(rt)
     return toPublicRavelConfig(rt.cfg)
   })
 }
@@ -1925,7 +1972,12 @@ export async function detachChild(
   )
   emitChildrenChanged(ravelId)
   // Explicit event so the manager can propose a revised plan around the gap.
-  enqueue(rt, () => runManagerTurns(rt, settings, detachedChildDirective(dispatch.briefId, dependents))).catch((e) =>
+  // Detaching frees a live slot; queued briefs advance into it after the replan
+  // turn, the same way they do when a child exits or fails to start.
+  enqueue(rt, async () => {
+    await runManagerTurns(rt, settings, detachedChildDirective(dispatch.briefId, dependents))
+    await flushQueuedBriefs(rt)
+  }).catch((e) =>
     appendLog(ravelId, 'error', 'turn', `detach replan turn failed: ${msg(e)}`)
   )
   return toPublicRavelConfig(saved)
@@ -2099,6 +2151,7 @@ export function onSessionExit(sessionId: string, result: SessionExitResult): voi
         settings,
         childExitDirective(dispatch.briefId, completed, rt.cfg.plan, managerBriefing, verification)
       )
+      await flushQueuedBriefs(rt)
     }).catch((e) => {
       rt.verifying.delete(dispatch.briefId)
       appendLog(saved.id, 'error', 'turn', `child-exit turn failed: ${msg(e)}`)

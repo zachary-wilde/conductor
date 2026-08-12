@@ -41,10 +41,10 @@ export function TopBar(): JSX.Element {
   const secured = apiToken.length > 0
 
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-edge bg-bg-0/80 px-4 py-3 backdrop-blur md:px-6">
+    <header className="tablet-canvas-topbar sticky top-0 z-10 flex min-h-14 items-center gap-3 border-b border-edge bg-bg-0/80 px-4 py-3 backdrop-blur md:px-6">
       <div className="flex items-center gap-2">
         <Radio size={16} className="text-accent" />
-        <span className="text-sm font-semibold tracking-tight text-text-hi">Conductor</span>
+        <span className="text-sm font-semibold tracking-tight text-text-hi">Reigen</span>
       </div>
 
       <div className="ml-auto flex items-center gap-3">
@@ -64,10 +64,12 @@ export function TopBar(): JSX.Element {
           onClick={openConnect}
           title={`Core: ${apiBase}`}
           aria-label="Connection settings"
-          className="flex items-center gap-1.5 rounded-md border border-edge bg-bg-2 px-2 py-1 font-mono text-[10px] text-text-low transition-colors hover:bg-bg-3 hover:text-text-mid"
+          className="flex min-h-11 items-center gap-1.5 rounded-md border border-edge bg-bg-2 px-2 py-1 font-mono text-[10px] text-text-low transition-colors hover:bg-bg-3 hover:text-text-mid"
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${DOT[conn]}`} />
-          <span className={TEXT[conn]}>{LABEL[conn]}</span>
+          <span className={TEXT[conn]} aria-live="polite">
+            {LABEL[conn]}
+          </span>
           {secured ? <Lock size={11} className="text-accent-green" /> : null}
           <span className="max-w-[10rem] truncate text-text-hint">{hostOf(apiBase)}</span>
         </button>

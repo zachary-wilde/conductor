@@ -78,7 +78,16 @@ export type SessionStatus =
   | 'closed'
   | 'error'
 
-export type RavelRole = 'orchestrator' | 'lead-engineer' | 'auditor' | 'minor-task'
+export type RavelRole =
+  | 'orchestrator'
+  | 'lead-engineer'
+  | 'auditor'
+  | 'minor-task'
+  | 'researcher'
+  | 'test-engineer'
+  | 'security-engineer'
+  | 'performance-engineer'
+  | 'release-engineer'
 export type ChildRavelRole = Exclude<RavelRole, 'orchestrator'>
 
 /**
@@ -202,6 +211,23 @@ export type Session =
       briefId: string
     })
 
+
+/**
+ * A bounded, screen-faithful replay of one session's raw PTY output. Returned
+ * by the Core for reattachment; the buffer carries ANSI sequences verbatim so a
+ * reconnecting terminal renders the exact screen state. `generation` is the
+ * monotonic count of PTY data chunks accepted before this snapshot.
+ */
+export interface SessionSnapshot {
+  sessionId: string
+  /** Raw PTY text, including ANSI escape sequences, bounded by the Core. */
+  buffer: string
+  /** Number of PTY data chunks accepted before this snapshot. */
+  generation: number
+  cols: number
+  rows: number
+  truncated: boolean
+}
 export interface EditorSettings {
   /** Monaco font family. Empty string = platform default monospace. */
   fontFamily: string
@@ -340,33 +366,49 @@ export function splitModel(value: string | null | undefined): { model: string; b
  * children through the plan; this is the same vocabulary for sessions you
  * launch yourself, applied as a prompt preamble rather than Ravel wiring.
  */
-export type SessionBehavior = 'none' | RavelRole
+export type SessionBehavior = 'none' | ChildRavelRole
 
 export const SESSION_BEHAVIORS: readonly SessionBehavior[] = [
   'none',
-  'orchestrator',
   'lead-engineer',
   'auditor',
-  'minor-task'
+  'minor-task',
+  'researcher',
+  'test-engineer',
+  'security-engineer',
+  'performance-engineer',
+  'release-engineer'
 ]
 
 export const BEHAVIOR_LABELS: Record<SessionBehavior, string> = {
   none: 'No role',
-  orchestrator: 'Orchestrator',
   'lead-engineer': 'Lead Engineer',
   auditor: 'Auditor',
-  'minor-task': 'Minor Task'
+  'minor-task': 'Minor Task',
+  researcher: 'Researcher',
+  'test-engineer': 'Test Engineer',
+  'security-engineer': 'Security Engineer',
+  'performance-engineer': 'Performance Engineer',
+  'release-engineer': 'Release Engineer'
 }
 
-export const BEHAVIOR_BRIEFS: Record<RavelRole, string> = {
-  orchestrator:
-    'ROLE: Orchestrator\n\nYou coordinate work across the repository. Decompose the request, sequence it, and delegate rather than implementing everything yourself. Keep a written plan and report progress.',
+export const BEHAVIOR_BRIEFS: Record<Exclude<RavelRole, 'orchestrator'>, string> = {
   'lead-engineer':
     'ROLE: Lead Engineer\n\nYou own the implementation. Read before editing, follow existing conventions, keep changes tight, and verify with the project\u2019s own tests and typechecks before claiming completion.',
   auditor:
     'ROLE: Auditor\n\nYou review, you do not implement. Report concrete defects with file:line evidence, ranked by severity. Do not modify files unless explicitly asked.',
   'minor-task':
-    'ROLE: Minor Task\n\nYou handle one narrow, well-scoped change. Do exactly what is asked, touch nothing else, and stop when the single task is done.'
+    'ROLE: Minor Task\n\nYou handle one narrow, well-scoped change. Do exactly what is asked, touch nothing else, and stop when the single task is done.',
+  researcher:
+    'ROLE: Researcher\n\nYou investigate APIs, libraries, repository patterns, and technical options. Do not edit files; return evidence and concrete recommendations.',
+  'test-engineer':
+    'ROLE: Test Engineer\n\nYou design and run focused tests for behavior, boundaries, and regressions. Report failures with exact reproduction and avoid unrelated edits.',
+  'security-engineer':
+    'ROLE: Security Engineer\n\nYou review trust boundaries, permissions, secrets, injection paths, and unsafe changes. Report concrete risks with evidence and remediation.',
+  'performance-engineer':
+    'ROLE: Performance Engineer\n\nYou profile CPU, memory, I/O, latency, and concurrency. Measure before changing code and report the bottleneck and the verified improvement.',
+  'release-engineer':
+    'ROLE: Release Engineer\n\nYou handle packaging, migrations, changelogs, deployment checks, and release readiness. Verify artifacts and preserve a reproducible release record.'
 }
 
 /** Prefix a prompt with the selected role brief. */
@@ -867,8 +909,9 @@ export interface RavelConfig {
   repoId: string
   repoPath: string
   harness: HarnessId
-  /** Model override for the Orchestrator; null uses the harness default. */
+  /** Model override for the Reigen manager; null uses the harness default. */
   model: string | null
+  /** Legacy persisted field retained for compatibility; scheduling ignores it. */
   maxChildren: number
   allowRisky: boolean
   status: RavelStatus
@@ -899,12 +942,14 @@ export type RavelActionResult =
   | { ok: false; error: RavelActionError }
 
 export interface CreateRavelRequest {
-  name: string
+  /** Legacy callers may send a name; Reigen is always canonicalized by the main process. */
+  name?: string
   repoId: string
   repoPath: string
   harness: HarnessId
   model?: string
   initialInstruction?: string
+  /** Legacy input retained for IPC compatibility; ignored by the adaptive scheduler. */
   maxChildren?: number
   allowRisky?: boolean
 }

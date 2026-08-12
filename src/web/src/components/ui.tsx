@@ -1,6 +1,7 @@
 // Small, dependency-light UI primitives shared across the web views. Styled
 // with the theme tokens so they repaint with `:root`; no CSS files of their own.
 
+import { forwardRef } from 'react'
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -19,21 +20,20 @@ const VARIANT_CLASS: Record<Variant, string> = {
     'bg-accent-green/10 text-accent-green hover:bg-accent-green/20 border border-accent-green/30'
 }
 
-export function Button({
-  variant = 'ghost',
-  className = '',
-  children,
-  ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }): JSX.Element {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }
+>(function Button({ variant = 'ghost', className = '', children, ...rest }, ref) {
   return (
     <button
+      ref={ref}
       {...rest}
-      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${VARIANT_CLASS[variant]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${VARIANT_CLASS[variant]} ${className}`}
     >
       {children}
     </button>
   )
-}
+})
 
 export function Spinner({ className = '' }: { className?: string }): JSX.Element {
   return (
@@ -120,15 +120,32 @@ export function Toggle({
   )
 }
 
+export type BadgeTone =
+  | 'neutral'
+  | 'accent'
+  | 'blue'
+  | 'cyan'
+  | 'green'
+  | 'amber'
+  | 'red'
+  | 'purple'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'danger'
+
 export function Badge({
+  tone,
   children,
   className = ''
 }: {
   children: ReactNode
   className?: string
+  tone?: BadgeTone
 }): JSX.Element {
   return (
     <span
+      data-tone={tone}
       className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide ${className}`}
     >
       {children}

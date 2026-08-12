@@ -15,8 +15,18 @@ import { MAX_ROUNDTABLE_SEATS, MIN_ROUNDTABLE_SEATS } from '@shared/types'
 export type IpcValidation<T> = { ok: true; value: T } | { ok: false; error: RavelActionError }
 
 const HARNESSES: Record<HarnessId, true> = { claude: true, codex: true, zai: true }
-const CHILD_ROLES: Record<ChildRavelRole, true> = { 'lead-engineer': true, auditor: true, 'minor-task': true }
-const MAX_CHILDREN: Record<number, true> = { 2: true, 4: true, 8: true, 16: true }
+const CHILD_ROLES: Record<ChildRavelRole, true> = {
+  'lead-engineer': true,
+  auditor: true,
+  'minor-task': true,
+  researcher: true,
+  'test-engineer': true,
+  'security-engineer': true,
+  'performance-engineer': true,
+  'release-engineer': true
+}
+const LEGACY_MAX_CHILDREN: Record<number, true> = { 2: true, 4: true, 8: true, 16: true }
+const REIGEN_NAME = 'Reigen'
 const SESSION_PRIVILEGED_FIELDS: Record<string, true> = {
   parentId: true,
   ravelId: true,
@@ -89,7 +99,7 @@ function sessionAgent(value: unknown): IpcValidation<HarnessId | null> {
 
 function childRole(value: unknown): IpcValidation<ChildRavelRole> {
   if (typeof value !== 'string' || CHILD_ROLES[value as ChildRavelRole] !== true) {
-    return invalid('role must be one of lead-engineer, auditor, or minor-task.')
+    return invalid('role must be one of lead-engineer, auditor, minor-task, researcher, test-engineer, security-engineer, performance-engineer, or release-engineer.')
   }
   return { ok: true, value: value as ChildRavelRole }
 }
@@ -180,8 +190,8 @@ function windowsIdentity(path: string): string {
 
 export function parseCreateRavelRequest(payload: unknown, repos: Repo[]): IpcValidation<CreateRavelRequest> {
   if (!isIpcObject(payload)) return invalid('ravel create request must be an object.')
-  const name = nonEmptyString(payload, 'name')
-  if (!name.ok) return name
+  const legacyName = optionalString(payload, 'name')
+  if (!legacyName.ok) return legacyName
   const repoId = nonEmptyString(payload, 'repoId')
   if (!repoId.ok) return repoId
   const repoPath = nonEmptyString(payload, 'repoPath')
@@ -199,8 +209,8 @@ export function parseCreateRavelRequest(payload: unknown, repos: Repo[]): IpcVal
   if (!initialInstruction.ok) return initialInstruction
   const allowRisky = optionalBoolean(payload, 'allowRisky')
   if (!allowRisky.ok) return allowRisky
-  if (payload.maxChildren !== undefined && (!Number.isSafeInteger(payload.maxChildren) || MAX_CHILDREN[payload.maxChildren as number] !== true)) {
-    return invalid('maxChildren must be one of 2, 4, 8, or 16.')
+  if (payload.maxChildren !== undefined && (!Number.isSafeInteger(payload.maxChildren) || LEGACY_MAX_CHILDREN[payload.maxChildren as number] !== true)) {
+    return invalid('maxChildren must be one of 2, 4, 8, or 16 when supplied by a legacy caller.')
   }
   const model = optionalString(payload, 'model')
   if (!model.ok) return model
@@ -209,13 +219,12 @@ export function parseCreateRavelRequest(payload: unknown, repos: Repo[]): IpcVal
   return {
     ok: true,
     value: {
-      name: name.value,
+      name: REIGEN_NAME,
       repoId: repo.id,
       repoPath: repo.path,
       harness: selectedHarness.value,
       ...(model.value === undefined ? {} : { model: model.value.trim() }),
       ...(initialInstruction.value === undefined ? {} : { initialInstruction: initialInstruction.value }),
-      ...(payload.maxChildren === undefined ? {} : { maxChildren: payload.maxChildren as number }),
       ...(allowRisky.value === undefined ? {} : { allowRisky: allowRisky.value })
     }
   }

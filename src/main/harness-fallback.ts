@@ -36,6 +36,7 @@ const DRY_MARKERS: readonly string[] = [
   'insufficient',
   'exhausted',
   'usage limit',
+  'session limit',
   'billing',
   'payment',
   'credit',

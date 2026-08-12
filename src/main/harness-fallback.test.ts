@@ -9,7 +9,8 @@ describe('classifyHarnessFailure', () => {
       'Codex headless turn exited 1: 429 Too Many Requests',
       'error: rate limit reached for this model',
       'insufficient credit balance',
-      'usage limit reached'
+      'usage limit reached',
+      'session limit'
     ]) {
       expect(classifyHarnessFailure(message)).toBe('dry')
     }

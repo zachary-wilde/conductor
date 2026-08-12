@@ -293,7 +293,7 @@ describe('createOperationsCore (assembly)', () => {
       expect(index.status).toBe(200)
       const html = await index.text()
       expect(html).toContain('id="root"')
-      expect(html).toContain('Conductor')
+      expect(html).toContain('Reigen')
 
       // The referenced JS asset is served with a JS content-type.
       const assetPath = html.match(/(\/assets\/[^"']+\.js)/)?.[1]

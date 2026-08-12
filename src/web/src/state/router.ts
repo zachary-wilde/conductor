@@ -1,6 +1,6 @@
-// Tiny hash-based router. No dependency: the four top-level destinations plus a
-// `workers/:id` detail route are encoded in `location.hash` so back/forward and
-// deep links work on a phone, and so the core can serve one static index.html.
+// Tiny hash-based router. No dependency: top-level destinations plus a worker
+// detail route are encoded in `location.hash` so back/forward and deep links
+// work on a phone, and so the core can serve one static index.html.
 
 import { useEffect, useState } from 'react'
 
@@ -10,6 +10,7 @@ export type Route =
   | { name: 'worker'; workerId: string }
   | { name: 'automations' }
   | { name: 'review' }
+  | { name: 'runtime' }
 
 /** Parse `#/workers/abc` → `{ name: 'worker', workerId: 'abc' }`. */
 export function parseHash(hash: string): Route {
@@ -26,6 +27,8 @@ export function parseHash(hash: string): Route {
       return { name: 'automations' }
     case 'review':
       return { name: 'review' }
+    case 'runtime':
+      return { name: 'runtime' }
     default:
       return { name: 'timeline' }
   }

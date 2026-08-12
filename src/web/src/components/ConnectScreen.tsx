@@ -1,4 +1,4 @@
-// Connect dialog: the operator's way to point this device at a Conductor core
+// Connect dialog: the operator's way to point this device at a Reigen core
 // (desktop same-origin, a dev core, or a PC core over the LAN from the Android
 // APK) and supply its access token. Shown automatically when the opening
 // handshake fails (incl. a 401 from a missing/wrong token), and re-openable any
@@ -76,9 +76,9 @@ export function ConnectScreen(): JSX.Element | null {
         className="w-full max-w-md rounded-lg border border-edge bg-bg-1 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-sm font-semibold text-text-hi">Connect to Conductor core</h2>
+        <h2 className="text-sm font-semibold text-text-hi">Connect to Reigen Core</h2>
         <p className="mt-1 text-xs text-text-hint">
-          Point this device at the core (e.g. on your PC over the LAN) and supply its access token.
+          Point this device at the Reigen Core (e.g. on your PC over the LAN) and supply its access token.
         </p>
         {initial.apiFingerprint ? (
           <div

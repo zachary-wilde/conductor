@@ -25,7 +25,7 @@ export interface DetachConfirmCopy {
  * nothing is killed. Exposed for the view and pinned by tests.
  */
 export const DETACH_EFFECT =
-  'The child becomes a standalone session you control; the Ravel is asked to replan; nothing is killed.'
+  'The child becomes a standalone session you control; the parent workflow is asked to replan; nothing is killed.'
 
 /**
  * Build the confirmation copy for a detach given the dependent brief titles.
@@ -37,6 +37,6 @@ export function detachConfirmCopy(dependentBriefs: readonly string[]): DetachCon
   const hasDependents = deps.length > 0
   const intro = hasDependents
     ? `Detaching this worker blocks ${deps.length} dependent brief${deps.length === 1 ? '' : 's'}:`
-    : 'Detach hands this running agent to you as a standalone session and asks the Ravel to replan.'
+    : 'Detach hands this running agent to you as a standalone session and asks the parent workflow to replan.'
   return { hasDependents, intro, dependentBriefs: deps, effect: DETACH_EFFECT }
 }

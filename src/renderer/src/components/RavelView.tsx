@@ -77,7 +77,16 @@ import {
 } from 'lucide-react'
 
 const MAX_MESSAGE_CHARS = 16000
-const CHILD_ROLES: ChildRavelRole[] = ['lead-engineer', 'auditor', 'minor-task']
+const CHILD_ROLES: ChildRavelRole[] = [
+  'lead-engineer',
+  'auditor',
+  'minor-task',
+  'researcher',
+  'test-engineer',
+  'security-engineer',
+  'performance-engineer',
+  'release-engineer'
+]
 const LOG_COLOR: Record<RavelLogLevel, string> = {
   info: '#6b6b76',
   action: '#34c759',

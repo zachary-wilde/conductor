@@ -116,7 +116,16 @@ export type ApplyBriefAssignmentInput = {
   harnessAvailability: Record<HarnessId, HarnessAvailability>
 }
 
-const CHILD_ROLES: Record<string, true> = { 'lead-engineer': true, auditor: true, 'minor-task': true }
+const CHILD_ROLES: Record<ChildRavelRole, true> = {
+  'lead-engineer': true,
+  auditor: true,
+  'minor-task': true,
+  researcher: true,
+  'test-engineer': true,
+  'security-engineer': true,
+  'performance-engineer': true,
+  'release-engineer': true
+}
 const LIVE_DISPATCH_STATUSES: Record<RavelDispatchRecord['status'], boolean> = {
   starting: true,
   active: true,
@@ -175,7 +184,7 @@ export function applyBriefAssignmentToPlan(
 
   const assignedRole = input.assignment.role
   if (assignedRole !== undefined && !isChildRavelRole(assignedRole)) {
-    return resultError('brief-role-invalid', 'Child briefs cannot use the orchestrator role.', 'role', input.briefId)
+    return resultError('brief-role-invalid', 'Child briefs must use a specialist role.', 'role', input.briefId)
   }
 
   const assignedHarness = input.assignment.harness
@@ -250,9 +259,6 @@ export function canSpawnBrief(ravel: RavelConfig, input: CanSpawnBriefInput): Sp
   }
   if (sameRevisionDispatch === 'live') {
     return resultError('brief-already-live', 'The requested brief already has a live dispatch.')
-  }
-  if (liveDispatchCount(ravel.dispatches) >= ravel.maxChildren) {
-    return resultError('concurrency-cap-reached', 'Ravel has reached its child concurrency cap.')
   }
   if (!isHarnessAvailable(input.harnessAvailability, brief.harness)) {
     return resultError('brief-harness-unavailable', 'The requested brief harness is not available.')
@@ -332,13 +338,23 @@ export function interruptLiveDispatchesForRestart(ravel: RavelConfig): RavelConf
 export function ravelRoleLabel(role: ChildRavelRole | 'orchestrator'): string {
   switch (role) {
     case 'orchestrator':
-      return 'Orchestrator'
+      return 'Reigen'
     case 'lead-engineer':
       return 'Lead Engineer'
     case 'auditor':
       return 'Auditor'
     case 'minor-task':
       return 'Minor Task'
+    case 'researcher':
+      return 'Researcher'
+    case 'test-engineer':
+      return 'Test Engineer'
+    case 'security-engineer':
+      return 'Security Engineer'
+    case 'performance-engineer':
+      return 'Performance Engineer'
+    case 'release-engineer':
+      return 'Release Engineer'
   }
 }
 
@@ -393,7 +409,7 @@ function validateProposal(input: ValidatePlanProposalInput): ValidationError[] {
 
     const normalizedId = isNonEmptyString(brief.id) ? brief.id.trim() : ''
     if (!isChildRavelRole(brief.role)) {
-      errors.push(error('brief-role-invalid', 'Child briefs cannot use the orchestrator role.', `${briefPath}.role`, normalizedId || undefined))
+      errors.push(error('brief-role-invalid', 'Child briefs must use a specialist role.', `${briefPath}.role`, normalizedId || undefined))
     }
     if (normalizedId !== '') {
       if (seenBriefIds.has(normalizedId)) {
@@ -609,13 +625,6 @@ function blockingSameRevisionDispatch(
   return null
 }
 
-function liveDispatchCount(dispatches: readonly RavelDispatchRecord[]): number {
-  let count = 0
-  for (let index = 0; index < dispatches.length; index += 1) {
-    if (LIVE_DISPATCH_STATUSES[dispatches[index].status]) count += 1
-  }
-  return count
-}
 
 function staleRevision(plan: RavelPlan, requestedRevision: number): StaleRevisionError | null {
   return plan.revision === requestedRevision

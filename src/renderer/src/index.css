@@ -1,3 +1,5 @@
+@import '../../shared/ui-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,23 +37,6 @@
 :root[data-theme='flat'] {
   --glass-tint: 10 10 11;
   --conversation-bg: 10 10 11;
-  --bg-0: 10 10 11;
-  --bg-1: 17 17 19;
-  --bg-2: 22 22 24;
-  --bg-3: 29 29 32;
-  --edge: 38 38 43;
-  --edge-mid: 44 44 51;
-  --edge-active: 58 58 68;
-  --accent: 139 124 246;
-  --accent-blue: 37 99 235;
-  --success: 61 220 151;
-  --accent-green: var(--success); /* compatibility alias during migration */
-  --accent-cyan: 50 212 222;
-  --accent-purple: 139 124 246;
-  --text-hi: 245 245 247;
-  --text-mid: 161 161 170;
-  --text-low: 107 107 118;
-  --text-hint: 74 74 85;
 }
 
 /* Terminal: mirrors the user's Windows Terminal exactly.
@@ -68,6 +53,8 @@
   --edge-active: 0 255 0;
   --accent: 139 124 246;
   --accent-blue: 0 170 255;
+  --warn: 255 255 0;
+  --danger: 255 0 0;
   --success: 0 204 0;
   --accent-green: var(--success);
   --accent-cyan: 0 255 204;
@@ -553,24 +540,40 @@
   display: none;
 }
 
-.session-inspector-host {
+.session-view {
   position: relative;
+  overflow: hidden;
+}
+
+.session-view__body {
+  overflow: hidden;
+}
+
+.session-inspector-host {
   z-index: 20;
+  flex: 0 0 330px;
+  width: 330px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 @media (max-width: 1279px) {
   .session-inspector-host {
-    position: fixed;
-    top: 48px;
-    right: 300px;
+    position: absolute;
+    top: 0;
+    right: 0;
     bottom: 0;
+    width: min(340px, 90vw);
+    max-width: 90%;
     box-shadow: -16px 0 40px -12px rgba(0, 0, 0, 0.6);
   }
 }
 
-@media (max-width: 1099px) {
+@media (max-width: 720px) {
   .session-inspector-host {
-    right: 0;
+    width: min(340px, 100%);
+    max-width: 100%;
   }
 }
 

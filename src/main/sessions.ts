@@ -8,6 +8,7 @@ import {
   type HarnessId,
   type ResolvedHarness,
   type Session,
+  type SessionSnapshot,
   type SessionStatus,
   type Settings
 } from '@shared/types'
@@ -20,6 +21,9 @@ const IDLE_MS_TO_NEEDS_INPUT = 15_000
 /** Announce accrued output roughly every this many cleaned characters. */
 const PROGRESS_REPORT_CHARS = 1_000
 
+/** Bound for the raw PTY replay buffer: the newest N characters are retained. */
+const MAX_REPLAY_CHARS = 128 * 1024
+
 /** What a finished session is worth to its owner. */
 export interface SessionExitResult {
   exitCode: number
@@ -30,8 +34,13 @@ export interface SessionExitResult {
 }
 
 export interface SessionEvents {
-  /** Stream a chunk of pty output to the renderer. */
-  data: (sessionId: string, data: string) => void
+  /**
+   * Stream a chunk of pty output to the renderer. `generation` is the monotonic
+   * chunk count AFTER this chunk was appended to the replay buffer, so a
+   * snapshot taken at the same instant (same generation) covers exactly this
+   * chunk — the renderer uses it to drop chunks already in the snapshot.
+   */
+  data: (sessionId: string, data: string, generation: number) => void
   /**
    * A pty was spawned and is now in `listSessions()`. Distinct from the first
    * `status` change, which only fires once the child writes something — services
@@ -59,6 +68,12 @@ interface Runtime {
   output: SessionOutput
   /** Characters already announced through `progress`. */
   reportedChars: number
+  /** Bounded raw PTY text (with ANSI) for reattachment replay. */
+  replayBuffer: string
+  /** Monotonic count of PTY data chunks appended to the replay buffer. */
+  replayGeneration: number
+  /** True once the replay buffer was ever trimmed to the bound. */
+  replayTruncated: boolean
 }
 
 const runtimes = new Map<string, Runtime>()
@@ -218,18 +233,27 @@ export async function createSession(req: CreateSessionRequest, settings: Setting
     idleTimer: undefined,
     gotData: false,
     output: new SessionOutput(),
-    reportedChars: 0
+    reportedChars: 0,
+    replayBuffer: '',
+    replayGeneration: 0,
+    replayTruncated: false
   }
 
   p.onData((chunk) => {
     rt.output.push(chunk)
+    rt.replayBuffer += chunk
+    rt.replayGeneration++
+    if (rt.replayBuffer.length > MAX_REPLAY_CHARS) {
+      rt.replayBuffer = rt.replayBuffer.slice(rt.replayBuffer.length - MAX_REPLAY_CHARS)
+      rt.replayTruncated = true
+    }
     rt.gotData = true
     session.lastActivityAt = Date.now()
     if (session.status === 'starting' || session.status === 'needs-input') {
       setStatus(rt, 'running')
     }
     armIdleTimer(rt)
-    events.data(id, chunk)
+    events.data(id, chunk, rt.replayGeneration)
     // Throttled: a per-chunk announcement would bill through the IPC bridge on
     // every keystroke of redraw for no extra accuracy.
     const unreported = rt.output.chars - rt.reportedChars
@@ -258,6 +282,24 @@ export function getSession(id: string): Session | undefined {
 
 export function listSessions(): Session[] {
   return Array.from(runtimes.values()).map((r) => r.session)
+}
+
+/**
+ * Return a bounded raw replay of one session's PTY output for reattachment.
+ * Returns `null` for an unknown or already-exited session; never throws or
+ * fabricates a snapshot. Does not mutate the runtime or pause the PTY.
+ */
+export function snapshotSession(id: string): SessionSnapshot | null {
+  const rt = runtimes.get(id)
+  if (!rt) return null
+  return {
+    sessionId: id,
+    buffer: rt.replayBuffer,
+    generation: rt.replayGeneration,
+    cols: rt.pty.cols,
+    rows: rt.pty.rows,
+    truncated: rt.replayTruncated
+  }
 }
 
 export function writeToSession(id: string, data: string): boolean {

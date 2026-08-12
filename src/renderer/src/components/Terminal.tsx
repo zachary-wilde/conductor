@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
+import { createReplayGate } from '../lib/terminalReplay'
 
 type TerminalPalette = {
   background: string
@@ -143,10 +144,35 @@ export function TerminalView({
     // Input -> pty.
     const dispInput = term.onData((data) => window.api.writeToSession(sessionId, data))
 
-    // Output -> terminal.
-    const unsubData = window.api.onPtyData((id, data) => {
-      if (id === sessionId) term.write(data)
+    // Output -> terminal. Live chunks route through a replay gate so a
+    // reconnecting terminal hydrates the Core snapshot before live output,
+    // closing the disconnect gap. Subscribe BEFORE the async snapshot so
+    // chunks in flight queue and flush in order after the snapshot. Each live
+    // chunk carries the Core's monotonic generation so the gate can drop
+    // chunks already covered by the snapshot (no duplicate output).
+    let disposed = false
+    const gate = createReplayGate((chunk) => term.write(chunk))
+    const unsubData = window.api.onPtyData((id, data, generation) => {
+      if (id === sessionId) gate.pushLive(data, generation)
     })
+
+    window.api
+      .snapshotSession(sessionId)
+      .then((snap) => {
+        if (disposed) return
+        for (const chunk of gate.completeSnapshot(snap?.buffer ?? '', snap?.generation ?? 0)) {
+          if (disposed) return
+          if (chunk) term.write(chunk)
+        }
+      })
+      .catch(() => {
+        if (disposed) return
+        for (const chunk of gate.completeSnapshot('', 0)) {
+          if (disposed) return
+          if (chunk) term.write(chunk)
+        }
+      })
+
     const unsubExit = window.api.onPtyExit((id) => {
       if (id === sessionId) {
         term.write('\r\n\x1b[2m— session ended —\x1b[0m\r\n')
@@ -167,6 +193,7 @@ export function TerminalView({
     term.focus()
 
     return () => {
+      disposed = true
       dispInput.dispose()
       unsubData()
       unsubExit()

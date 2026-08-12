@@ -12,7 +12,7 @@ describe('harness child environment', () => {
   test('drops the API key that would override a claude.ai login', () => {
     const { env, stripped } = harnessEnv('claude', {
       PATH: 'C:/bin',
-      ANTHROPIC_API_KEY: 'test-not-a-real-key'
+      ANTHROPIC_API_KEY: 'sk-ant-not-a-real-key'
     })
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
     expect(stripped).toEqual(['ANTHROPIC_API_KEY'])

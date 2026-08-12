@@ -149,17 +149,15 @@ describe('parseCreateNormalSessionRequest', () => {
 })
 
 describe('parseCreateRavelRequest', () => {
-  test('validates and canonicalizes create requests to the tracked repo path', () => {
+  test('canonicalizes create requests to Reigen and ignores legacy child limits', () => {
     const result = parseCreateRavelRequest(
       {
-        name: 'Ravel',
         repoId: 'repo-1',
         repoPath: 'd:/work/repo/.',
         harness: 'codex',
         initialInstruction: 'Plan this',
         maxChildren: 8,
         allowRisky: false,
-        // The pulse interval is gone; an old renderer sending one must not have it echoed back.
         pulseSeconds: 120
       },
       [repo]
@@ -168,36 +166,38 @@ describe('parseCreateRavelRequest', () => {
     expect(result).toEqual({
       ok: true,
       value: {
-        name: 'Ravel',
+        name: 'Reigen',
         repoId: 'repo-1',
         repoPath: repo.path,
         harness: 'codex',
         initialInstruction: 'Plan this',
-        maxChildren: 8,
         allowRisky: false
       }
     })
   })
 
+  test('accepts omitted legacy identity and child limit fields', () => {
+    expect(parseCreateRavelRequest({ repoId: repo.id, repoPath: repo.path, harness: 'claude' }, [repo])).toEqual({
+      ok: true,
+      value: { name: 'Reigen', repoId: repo.id, repoPath: repo.path, harness: 'claude' }
+    })
+  })
+
   test('rejects unknown repo IDs and path mismatches', () => {
     expectInvalid(
-      parseCreateRavelRequest({ name: 'Ravel', repoId: 'missing', repoPath: repo.path, harness: 'claude' }, [repo]),
+      parseCreateRavelRequest({ repoId: 'missing', repoPath: repo.path, harness: 'claude' }, [repo]),
       'repoId'
     )
     expectInvalid(
-      parseCreateRavelRequest({ name: 'Ravel', repoId: repo.id, repoPath: 'D:/Other', harness: 'claude' }, [repo]),
+      parseCreateRavelRequest({ repoId: repo.id, repoPath: 'D:/Other', harness: 'claude' }, [repo]),
       'repoPath'
     )
   })
 
   test('rejects malformed create options', () => {
     expectInvalid(
-      parseCreateRavelRequest({ name: 'Ravel', repoId: repo.id, repoPath: repo.path, harness: 'bogus' }, [repo]),
+      parseCreateRavelRequest({ repoId: repo.id, repoPath: repo.path, harness: 'bogus' }, [repo]),
       'harness'
-    )
-    expectInvalid(
-      parseCreateRavelRequest({ name: 'Ravel', repoId: repo.id, repoPath: repo.path, harness: 'claude', maxChildren: 3 }, [repo]),
-      'maxChildren'
     )
   })
 })

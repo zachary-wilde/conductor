@@ -20,7 +20,7 @@ describe('detachConfirmCopy', () => {
     expect(copy.hasDependents).toBe(false)
     expect(copy.dependentBriefs).toEqual([])
     expect(copy.intro).toBe(
-      'Detach hands this running agent to you as a standalone session and asks the Ravel to replan.'
+      'Detach hands this running agent to you as a standalone session and asks the parent workflow to replan.'
     )
   })
 

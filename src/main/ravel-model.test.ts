@@ -703,11 +703,12 @@ describe('canSpawnBrief', () => {
     expect(canSpawnBrief(ravel(), { briefId: 'missing', planRevision: 2, fullContextChars: FULL_CONTEXT_CHARS, harnessAvailability })).toMatchObject({ ok: false, error: { code: 'brief-not-found' } })
   })
 
-  test('rejects unmet dependencies, concurrency cap, duplicate live dispatch, unavailable harness, and missing context exception', () => {
+  test('rejects unmet dependencies, duplicate live dispatch, unavailable harness, and missing context exception', () => {
     const dependent = brief({ id: 'dependent', dependsOn: ['lead'] })
     expect(canSpawnBrief(ravel({ plan: approvedPlan({ briefs: [brief(), dependent] }) }), { briefId: 'dependent', planRevision: 2, fullContextChars: FULL_CONTEXT_CHARS, harnessAvailability })).toMatchObject({ ok: false, error: { code: 'brief-dependencies-unmet' } })
 
-    expect(canSpawnBrief(ravel({ dispatches: [dispatch({ briefId: 'a' }), dispatch({ briefId: 'b', status: 'starting' })] }), { briefId: 'lead', planRevision: 2, fullContextChars: FULL_CONTEXT_CHARS, harnessAvailability })).toMatchObject({ ok: false, error: { code: 'concurrency-cap-reached' } })
+    // The runtime owns adaptive capacity; model eligibility only validates the brief.
+    expect(canSpawnBrief(ravel({ dispatches: [dispatch({ briefId: 'a' }), dispatch({ briefId: 'b', status: 'starting' })] }), { briefId: 'lead', planRevision: 2, fullContextChars: FULL_CONTEXT_CHARS, harnessAvailability })).toMatchObject({ ok: true })
 
     expect(canSpawnBrief(ravel({ dispatches: [dispatch()] }), { briefId: 'lead', planRevision: 2, fullContextChars: FULL_CONTEXT_CHARS, harnessAvailability })).toMatchObject({ ok: false, error: { code: 'brief-already-live' } })
 

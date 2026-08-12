@@ -19,3 +19,6 @@ codex-out-*.txt
 # Internal handoffs and agent briefs — working notes, NEVER published.
 HANDOFF*.md
 COORDINATION.md
+
+# Isolated implementation worktrees are local-only.
+.worktrees/

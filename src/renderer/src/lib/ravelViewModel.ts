@@ -105,6 +105,16 @@ export function childRavelRoleLabel(role: ChildRavelRole): string {
       return 'Auditor'
     case 'minor-task':
       return 'Minor Task'
+    case 'researcher':
+      return 'Researcher'
+    case 'test-engineer':
+      return 'Test Engineer'
+    case 'security-engineer':
+      return 'Security Engineer'
+    case 'performance-engineer':
+      return 'Performance Engineer'
+    case 'release-engineer':
+      return 'Release Engineer'
   }
 }
 

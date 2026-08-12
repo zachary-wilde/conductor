@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import { addUsage, defaultModelForRole, estimateCostUsd, estimateTokens } from './pricing'
+import {
+  applyBehaviorToPrompt,
+  BEHAVIOR_BRIEFS,
+  BEHAVIOR_LABELS,
+  SESSION_BEHAVIORS
+} from './types'
 
 describe('token estimation', () => {
   test('rounds up to whole tokens and floors negatives at zero', () => {
@@ -48,5 +54,50 @@ describe('role routing', () => {
     expect(defaultModelForRole('lead-engineer', 'claude')).toBe('opus')
     expect(defaultModelForRole('minor-task', 'zai')).toBeUndefined()
     expect(defaultModelForRole('minor-task', 'codex')).toBeUndefined()
+  })
+})
+
+describe('specialist roles', () => {
+  test('includes every specialist role and excludes orchestrator', () => {
+    expect(SESSION_BEHAVIORS).toEqual([
+      'none',
+      'lead-engineer',
+      'auditor',
+      'minor-task',
+      'researcher',
+      'test-engineer',
+      'security-engineer',
+      'performance-engineer',
+      'release-engineer'
+    ])
+    expect(BEHAVIOR_LABELS).toMatchObject({
+      researcher: 'Researcher',
+      'test-engineer': 'Test Engineer',
+      'security-engineer': 'Security Engineer',
+      'performance-engineer': 'Performance Engineer',
+      'release-engineer': 'Release Engineer'
+    })
+    expect(BEHAVIOR_LABELS).not.toHaveProperty('orchestrator')
+    expect(BEHAVIOR_BRIEFS).not.toHaveProperty('orchestrator')
+  })
+
+  test('prefixes prompts with each new specialist brief', () => {
+    for (const role of [
+      'researcher',
+      'test-engineer',
+      'security-engineer',
+      'performance-engineer',
+      'release-engineer'
+    ] as const) {
+      expect(applyBehaviorToPrompt(role, 'Do the work')).toContain(BEHAVIOR_BRIEFS[role])
+    }
+  })
+
+  test('routes new Claude roles to Sonnet', () => {
+    expect(defaultModelForRole('researcher', 'claude')).toBe('sonnet')
+    expect(defaultModelForRole('test-engineer', 'claude')).toBe('sonnet')
+    expect(defaultModelForRole('security-engineer', 'claude')).toBe('sonnet')
+    expect(defaultModelForRole('performance-engineer', 'claude')).toBe('sonnet')
+    expect(defaultModelForRole('release-engineer', 'claude')).toBe('sonnet')
   })
 })

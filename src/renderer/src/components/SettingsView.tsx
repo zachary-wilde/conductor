@@ -17,11 +17,12 @@ import {
   THEME_LABELS
 } from '@shared/types'
 import type { HarnessId, Settings, ThinkingLevel } from '@shared/types'
-import { Save, RotateCcw, FolderOpen, Check } from 'lucide-react'
+import { Save, RotateCcw, FolderOpen, Check, RefreshCw, Download, RotateCw } from 'lucide-react'
 import { HarnessBadge } from './HarnessBadge'
 import { RemoteAccessSection } from './RemoteAccessSection'
 
 const HARNESS_IDS: HarnessId[] = ['claude', 'codex', 'zai']
+type UpdaterStatus = Awaited<ReturnType<Window['api']['updaterStatus']>>
 
 export function SettingsView(): JSX.Element {
   const settings = useStore((s) => s.settings)
@@ -35,6 +36,32 @@ export function SettingsView(): JSX.Element {
   const [draft, setDraft] = useState<Settings>(settings)
   const [saved, setSaved] = useState(false)
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
+  const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus>({ state: 'idle' })
+
+  useEffect(() => {
+    let mounted = true
+    const unsubscribe = window.api.onUpdaterStatus((status) => {
+      if (mounted) setUpdaterStatus(status)
+    })
+    void window.api.updaterStatus().then((status) => {
+      if (mounted) setUpdaterStatus(status)
+    })
+    return () => {
+      mounted = false
+      unsubscribe()
+    }
+  }, [])
+
+  const updateStatus = async (action: () => Promise<UpdaterStatus>): Promise<void> => {
+    try {
+      setUpdaterStatus(await action())
+    } catch (error) {
+      setUpdaterStatus({
+        state: 'error',
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
 
   // Live model lists cost a CLI spawn each, so they are fetched when a
   // dropdown that shows them actually appears — not at app startup.
@@ -471,6 +498,63 @@ export function SettingsView(): JSX.Element {
           </Row>
         </Section>
 
+        <Section title="Updates" desc="Check GitHub Releases manually. Reigen never downloads or installs updates automatically.">
+          <Row label="Release status">
+            <div className="flex flex-wrap items-center gap-2">
+              {updaterStatus.state === 'available' ? (
+                <button
+                  className="btn-primary"
+                  data-testid="download-update"
+                  onClick={() => updateStatus(() => window.api.downloadUpdate())}
+                >
+                  <Download size={14} /> Download update
+                </button>
+              ) : updaterStatus.state === 'downloaded' ? (
+                <button
+                  className="btn-primary"
+                  data-testid="install-update"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        'Restart Reigen and install the downloaded update? Any running sessions will be interrupted.'
+                      )
+                    ) {
+                      void updateStatus(() => window.api.installUpdate(true))
+                    }
+                  }}
+                >
+                  <RotateCw size={14} /> Restart and install
+                </button>
+              ) : (
+                <button
+                  className="btn-outline"
+                  data-testid="check-for-updates"
+                  disabled={updaterStatus.state === 'checking' || updaterStatus.state === 'downloading'}
+                  onClick={() => updateStatus(() => window.api.checkForUpdates())}
+                >
+                  <RefreshCw size={14} /> Check for updates
+                </button>
+              )}
+              <span className="font-mono text-[10px] text-text-mid">
+                {updaterStatus.state === 'not-available'
+                  ? 'Reigen is up to date.'
+                  : updaterStatus.state === 'unsupported'
+                    ? 'Updates require a packaged build.'
+                    : updaterStatus.state === 'error'
+                      ? updaterStatus.error ?? 'Update failed.'
+                      : updaterStatus.state === 'available'
+                        ? `Version ${updaterStatus.version ?? 'new'} is available.`
+                        : updaterStatus.state === 'downloaded'
+                          ? `Version ${updaterStatus.version ?? 'new'} is ready.`
+                          : updaterStatus.state === 'downloading'
+                            ? `Downloading ${Math.round(updaterStatus.percent ?? 0)}%.`
+                            : updaterStatus.state === 'checking'
+                              ? 'Checking GitHub Releases…'
+                              : 'Manual update checks only.'}
+              </span>
+            </div>
+          </Row>
+        </Section>
         <Section title="Remote access" desc="Pair the Conductor phone app with this core over your LAN.">
           <RemoteAccessSection />
         </Section>

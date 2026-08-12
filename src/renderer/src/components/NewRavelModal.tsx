@@ -11,7 +11,6 @@ import {
 import { X, Loader2, Sparkles } from 'lucide-react'
 import { HarnessBadge } from './HarnessBadge'
 
-const MAX_OPTIONS = [2, 4, 8, 16]
 
 export function NewRavelModal(): JSX.Element {
   const repos = useStore((s) => s.repos)
@@ -28,11 +27,9 @@ export function NewRavelModal(): JSX.Element {
 
   const initialHarness = useMemo(() => defaultHarnessId({ settings, harnesses } as never), [settings, harnesses])
 
-  const [name, setName] = useState('')
   const [repoId, setRepoId] = useState(repos[0]?.id ?? '')
   const [harness, setHarness] = useState<HarnessId>(initialHarness)
   const [initialInstruction, setInitialInstruction] = useState('')
-  const [maxChildren, setMaxChildren] = useState(8)
   const [model, setModel] = useState('')
   const [behavior, setBehavior] = useState<ThinkingLevel>('auto')
   const [allowRisky, setAllowRisky] = useState(false)
@@ -41,7 +38,7 @@ export function NewRavelModal(): JSX.Element {
   const repo = repos.find((r) => r.id === repoId) ?? null
   const harnessAvailable = available.some((h) => h.id === harness)
   const modelOptions = modelOptionsFor(modelCatalogues[harness], model)
-  const canSubmit = !!repo && name.trim().length > 0 && harnessAvailable && !busy
+  const canSubmit = !!repo && harnessAvailable && !busy
 
   // Live model lists cost a CLI spawn each, so they are fetched when a
   // dropdown that shows them actually appears — not at app startup.
@@ -65,13 +62,11 @@ export function NewRavelModal(): JSX.Element {
   const submit = async (): Promise<void> => {
     if (!repo || !canSubmit) return
     const cfg = await createRavel({
-      name: name.trim(),
       repoId: repo.id,
       repoPath: repo.path,
       harness,
       model: composeModel(model, behavior) || undefined,
       initialInstruction: initialInstruction.trim() || undefined,
-      maxChildren,
       allowRisky
     })
     if (cfg) openRavel(cfg.id)
@@ -103,13 +98,13 @@ export function NewRavelModal(): JSX.Element {
           </div>
           <div className="min-w-0 flex-1">
             <div id="new-ravel-title" className="text-sm font-semibold">
-              New Ravel
+              New Reigen
             </div>
             <div className="font-mono text-[10px] text-text-hint">
-              A conversational orchestrator that plans before dispatching child sessions
+              A conversational orchestrator that plans before dispatching specialist sessions
             </div>
           </div>
-          <button className="text-text-low hover:text-text-hi disabled:opacity-50" onClick={close} disabled={busy} aria-label="Close New Ravel">
+          <button className="text-text-low hover:text-text-hi disabled:opacity-50" onClick={close} disabled={busy} aria-label="Close New Reigen">
             <X size={18} />
           </button>
         </div>
@@ -117,38 +112,26 @@ export function NewRavelModal(): JSX.Element {
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
           {repos.length === 0 && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200" role="alert">
-              No repositories are configured. Add a repository before creating Ravel.
+              No repositories are configured. Add a repository before creating Reigen.
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4 max-[640px]:grid-cols-1">
-            <Field label="Name">
-              <input
-                className="input"
-                placeholder="e.g. Refactor auth layer"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-                disabled={busy}
-              />
-            </Field>
-            <Field label="Repository">
-              <select className="input" value={repoId} onChange={(e) => setRepoId(e.target.value)} disabled={busy || repos.length === 0}>
-                {repos.map((repo) => (
-                  <option key={repo.id} value={repo.id}>
-                    {repo.name}
-                  </option>
-                ))}
-              </select>
-              {repos.length > 0 && !repo && (
-                <div className="mt-1 font-mono text-[10px] text-red-300" role="alert">
-                  Selected repository is unavailable. Choose another repository.
-                </div>
-              )}
-            </Field>
-          </div>
+          <Field label="Repository">
+            <select className="input" value={repoId} onChange={(e) => setRepoId(e.target.value)} disabled={busy || repos.length === 0}>
+              {repos.map((repo) => (
+                <option key={repo.id} value={repo.id}>
+                  {repo.name}
+                </option>
+              ))}
+            </select>
+            {repos.length > 0 && !repo && (
+              <div className="mt-1 font-mono text-[10px] text-red-300" role="alert">
+                Selected repository is unavailable. Choose another repository.
+              </div>
+            )}
+          </Field>
 
-          <Field label="Orchestrator harness">
+          <Field label="Reigen harness">
             <div className="flex flex-wrap gap-2">
               {available.length === 0 && (
                 <span className="font-mono text-[11px] text-text-hint" role="alert">
@@ -176,14 +159,14 @@ export function NewRavelModal(): JSX.Element {
             </div>
           </Field>
 
-          <Field label="Orchestrator model">
+          <Field label="Reigen model">
             <div className="flex items-center gap-2">
               <select
                 className="input flex-1"
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 disabled={busy}
-                aria-label="Orchestrator model"
+                aria-label="Reigen model"
               >
                 <option value="">(harness default)</option>
                 {modelOptions.values.map((option) => (
@@ -198,7 +181,7 @@ export function NewRavelModal(): JSX.Element {
                   value={behavior}
                   disabled={busy || model.length === 0}
                   onChange={(e) => setBehavior(e.target.value as ThinkingLevel)}
-                  aria-label="Orchestrator reasoning"
+                  aria-label="Reigen reasoning"
                 >
                   {THINKING_LEVELS.map((level) => (
                     <option key={level} value={level}>
@@ -214,7 +197,7 @@ export function NewRavelModal(): JSX.Element {
             <textarea
               className="input h-40 resize-none font-mono text-[12px] leading-relaxed"
               placeholder={
-                'Tell Ravel what outcome to plan for. Include constraints, files, acceptance criteria, and anything that should stay untouched.'
+                'Tell Reigen what outcome to plan for. Include constraints, files, acceptance criteria, and anything that should stay untouched.'
               }
               value={initialInstruction}
               onChange={(e) => setInitialInstruction(e.target.value)}
@@ -223,31 +206,11 @@ export function NewRavelModal(): JSX.Element {
             />
             <div className="mt-1 font-mono text-[10px] text-text-hint">
               {initialInstruction.trim().length === 0
-                ? 'Without an initial instruction, Ravel starts idle with the composer ready.'
-                : `${initialInstruction.length} chars · Ravel will compile a plan for approval before launching children`}
+                ? 'Without an initial instruction, Reigen starts idle with the composer ready.'
+                : `${initialInstruction.length} chars · Reigen will compile a plan for approval before launching children`}
             </div>
           </Field>
 
-          <div className="grid gap-4">
-            <Field label="Max children">
-              <div className="flex gap-1.5">
-                {MAX_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setMaxChildren(n)}
-                    disabled={busy}
-                    aria-pressed={maxChildren === n}
-                    className={`flex-1 rounded-md border py-1.5 text-sm transition-colors disabled:opacity-50 ${
-                      maxChildren === n ? 'border-accent bg-accent/10 text-text-hi' : 'border-edge text-text-mid hover:bg-bg-2'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
 
           <Field label="Autonomy">
             <label className="flex cursor-pointer items-start gap-2.5">
@@ -282,7 +245,7 @@ export function NewRavelModal(): JSX.Element {
           </button>
           <button className="btn-primary" disabled={!canSubmit} onClick={submit} aria-busy={busy}>
             {busy ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-            Create Ravel
+            Create Reigen
           </button>
         </div>
       </div>

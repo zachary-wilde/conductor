@@ -20,6 +20,7 @@ import type {
   SessionActivityEntry,
   Repo,
   Session,
+  SessionSnapshot,
   SessionStatus,
   Settings,
   UpdateRavelBriefAssignmentRequest,
@@ -78,6 +79,8 @@ const api = {
   resizeSession: (id: string, cols: number, rows: number): Promise<boolean> =>
     ipcRenderer.invoke('session:resize', id, cols, rows),
   killSession: (id: string): Promise<boolean> => ipcRenderer.invoke('session:kill', id),
+  snapshotSession: (id: string): Promise<SessionSnapshot | null> =>
+    ipcRenderer.invoke('session:snapshot', id),
 
   // Settings
   getSettings: (): Promise<Settings> => ipcRenderer.invoke('settings:get'),
@@ -174,8 +177,8 @@ const api = {
 
 
   // Events (streaming)
-  onPtyData: (cb: (sessionId: string, data: string) => void) => {
-    const h = (_e: unknown, id: string, data: string): void => cb(id, data)
+  onPtyData: (cb: (sessionId: string, data: string, generation: number) => void) => {
+    const h = (_e: unknown, id: string, data: string, generation: number): void => cb(id, data, generation)
     ipcRenderer.on('pty:data', h)
     return () => ipcRenderer.removeListener('pty:data', h)
   },
@@ -217,6 +220,16 @@ const api = {
   getCoreStatus: (): Promise<{ state: 'connecting' | 'connected' | 'error'; detail?: string }> =>
     ipcRenderer.invoke('core:status'),
   reconnectCore: (): Promise<void> => ipcRenderer.invoke('core:reconnect'),
+  updaterStatus: () => ipcRenderer.invoke('updater:status'),
+  checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+  downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+  installUpdate: (confirmWithActiveSessions = false) =>
+    ipcRenderer.invoke('updater:install', confirmWithActiveSessions),
+  onUpdaterStatus: (cb: (status: unknown) => void) => {
+    const h = (_e: unknown, status: unknown): void => cb(status)
+    ipcRenderer.on('updater:status', h)
+    return () => ipcRenderer.removeListener('updater:status', h)
+  },
   onCoreStatus: (cb: (status: { state: 'connecting' | 'connected' | 'error'; detail?: string }) => void) => {
     const h = (_e: unknown, status: { state: 'connecting' | 'connected' | 'error'; detail?: string }): void => cb(status)
     ipcRenderer.on('core:status', h)

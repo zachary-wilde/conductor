@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Conductor</string>
-    <string name="title_activity_main">Conductor</string>
+    <string name="app_name">Reigen</string>
+    <string name="title_activity_main">Reigen</string>
     <string name="package_name">com.conductor.app</string>
     <string name="custom_url_scheme">com.conductor.app</string>
 </resources>

@@ -1,17 +1,36 @@
 import type { ReactNode } from 'react'
 import type { Session } from '@shared/types'
-import { GitBranch, Folder, MessageSquare } from 'lucide-react'
+import { GitBranch, Folder, MessageSquare, X } from 'lucide-react'
 import { FileViewer } from './FileViewer'
 
 export interface SessionInspectorProps {
   session: Session
   selectedPath: string | null
   onOpenFile: (path: string) => void
+  onRequestClose: () => void
 }
 
-export function SessionInspector({ session, selectedPath, onOpenFile }: SessionInspectorProps): JSX.Element {
+export function SessionInspector({
+  session,
+  selectedPath,
+  onOpenFile,
+  onRequestClose
+}: SessionInspectorProps): JSX.Element {
   return (
-    <aside className="glass-bar session-inspector flex min-h-0 w-[340px] shrink-0 flex-col border-l" aria-label="Session inspector">
+    <aside className="glass-bar session-inspector flex min-h-0 w-full min-w-0 shrink-0 flex-col border-l" aria-label="Session inspector">
+      <div className="glass-divider flex items-center justify-between border-b px-4 py-2">
+        <span className="label">Session inspector</span>
+        <button
+          type="button"
+          data-testid="session-inspector-close"
+          className="btn-ghost px-2 py-1"
+          onClick={onRequestClose}
+          aria-label="Close session inspector"
+          title="Close session inspector"
+        >
+          <X size={14} />
+        </button>
+      </div>
       <div className="glass-divider flex flex-col gap-2 border-b px-4 py-3 font-mono text-[11px]">
         <Row icon={<GitBranch size={11} />} label="Branch" value={session.branch} />
         <Row icon={<Folder size={11} />} label="Worktree" value={session.worktreePath} />

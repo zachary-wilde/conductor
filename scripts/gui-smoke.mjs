@@ -514,9 +514,56 @@ async function main() {
       30_000
     )
     check('a repository loads and enables Terminal and Ravel', true)
+    // Open a real terminal session so the session panel's inspector is exercised
+    // through the same launcher and renderer path an operator uses.
+    await evaluate(`window.__smoke.id('new-terminal').click()`)
+    await waitFor(
+      evaluate,
+      `!!document.querySelector('[role="dialog"][aria-labelledby="new-launch-title"]')`,
+      'the New terminal modal',
+      15_000
+    )
+    await waitFor(
+      evaluate,
+      `!!window.__smoke.buttonLike('Launch') && !window.__smoke.buttonLike('Launch').disabled`,
+      'Launch terminal to enable',
+      30_000
+    )
+    await evaluate(`window.__smoke.buttonLike('Launch').click()`)
+    await waitFor(evaluate, `!!document.querySelector('[data-panel-kind="session"]')`, 'the real terminal session panel', 30_000)
+    await waitFor(
+      evaluate,
+      `document.querySelector('[data-testid="session-inspector-toggle"]')?.getAttribute('aria-expanded') === 'false'`,
+      'the closed session inspector toggle',
+      15_000
+    )
+    const inspectorInitiallyClosed = await evaluate(`
+      const toggle = document.querySelector('[data-testid="session-inspector-toggle"]')
+      return toggle?.getAttribute('aria-expanded') === 'false'
+    `)
+    check('the session inspector starts closed', inspectorInitiallyClosed)
+    await evaluate(`window.__smoke.id('session-inspector-toggle').click()`)
+    await waitFor(evaluate, `!!document.querySelector('#session-inspector')`, 'the session inspector to open')
+    check(
+      'the session inspector opens from its toggle',
+      await evaluate(`
+        return document.querySelector('[data-testid="session-inspector-toggle"]')?.getAttribute('aria-expanded') === 'true' &&
+          !!document.querySelector('#session-inspector')
+      `)
+    )
+    await evaluate(`window.__smoke.id('session-inspector-toggle').click()`)
+    await waitFor(evaluate, `!document.querySelector('#session-inspector')`, 'the session inspector to close')
+    check(
+      'the session inspector closes from its toggle',
+      await evaluate(`
+        return document.querySelector('[data-testid="session-inspector-toggle"]')?.getAttribute('aria-expanded') === 'false' &&
+          !document.querySelector('#session-inspector')
+      `)
+    )
 
     // 2. Create the ravel through the modal, with an instruction vague enough
     //    to force the clarification branch.
+
     await evaluate(`window.__smoke.id('new-ravel').click()`)
     await waitFor(evaluate, `!!document.querySelector('[role="dialog"][aria-labelledby="new-ravel-title"]')`, 'the New Ravel modal', 15_000)
     const noHarness = await evaluate(`return window.__smoke.bodyText().includes('No harnesses detected')`)
@@ -524,11 +571,10 @@ async function main() {
 
     await evaluate(`
       const dialog = document.querySelector('[role="dialog"][aria-labelledby="new-ravel-title"]')
-      window.__smoke.type(dialog.querySelector('input[placeholder="e.g. Refactor auth layer"]'), 'GUI smoke', 'input')
       window.__smoke.type(dialog.querySelector('textarea'), 'this is vague', 'textarea')
     `)
-    await waitFor(evaluate, `!!window.__smoke.buttonLike('Create Ravel') && !window.__smoke.buttonLike('Create Ravel').disabled`, 'Create Ravel to enable', 15_000)
-    await evaluate(`window.__smoke.buttonLike('Create Ravel').click()`)
+    await waitFor(evaluate, `!!window.__smoke.buttonLike('Create Reigen') && !window.__smoke.buttonLike('Create Reigen').disabled`, 'Create Reigen to enable', 15_000)
+    await evaluate(`window.__smoke.buttonLike('Create Reigen').click()`)
 
     await waitFor(evaluate, `!!document.querySelector('textarea[aria-label="Message Ravel"]')`, 'the Ravel view')
     await waitFor(evaluate, `window.__smoke.bodyText().includes('Needs clarification')`, 'the clarification question')
@@ -767,8 +813,8 @@ async function main() {
     await waitFor(evaluate, `window.__smoke.id('settings-save').textContent.includes('Saved')`, 'the settings save to confirm', 15_000)
 
     await evaluate(`window.__smoke.id('back').click()`)
-    await waitFor(evaluate, `!!window.__smoke.named('glass-ravel-row', 'GUI smoke')`, 'the ravel strip', 15_000)
-    await evaluate(`window.__smoke.named('glass-ravel-row', 'GUI smoke').click()`)
+    await waitFor(evaluate, `!!window.__smoke.named('glass-ravel-row', 'Reigen')`, 'the ravel strip', 15_000)
+    await evaluate(`window.__smoke.named('glass-ravel-row', 'Reigen').click()`)
     await waitFor(evaluate, `!!document.querySelector('textarea[aria-label="Message Ravel"]')`, 'the Ravel view', 15_000)
 
     const rails = await evaluate(`
@@ -844,8 +890,8 @@ async function main() {
     await waitFor(evaluate, `window.__smoke.id('settings-save').textContent.includes('Saved')`, 'the settings save to confirm', 15_000)
 
     await evaluate(`window.__smoke.id('back').click()`)
-    await waitFor(evaluate, `!!window.__smoke.named('glass-ravel-row', 'GUI smoke')`, 'the ravel strip', 15_000)
-    await evaluate(`window.__smoke.named('glass-ravel-row', 'GUI smoke').click()`)
+    await waitFor(evaluate, `!!window.__smoke.named('glass-ravel-row', 'Reigen')`, 'the ravel strip', 15_000)
+    await evaluate(`window.__smoke.named('glass-ravel-row', 'Reigen').click()`)
     await waitFor(evaluate, `!!window.__smoke.button('Resume') && !window.__smoke.button('Resume').disabled`, 'the Resume control', 15_000)
     await evaluate(`window.__smoke.button('Resume').click()`)
 

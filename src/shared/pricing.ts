@@ -26,7 +26,12 @@ export const MODEL_RATES_USD_PER_MTOK: Record<string, { input: number; output: n
 export const DEFAULT_MODEL_BY_ROLE: Record<ChildRavelRole, string> = {
   'lead-engineer': 'opus',
   auditor: 'sonnet',
-  'minor-task': 'haiku'
+  'minor-task': 'haiku',
+  researcher: 'sonnet',
+  'test-engineer': 'sonnet',
+  'security-engineer': 'sonnet',
+  'performance-engineer': 'sonnet',
+  'release-engineer': 'sonnet'
 }
 
 export function defaultModelForRole(role: ChildRavelRole, harness: HarnessId): string | undefined {

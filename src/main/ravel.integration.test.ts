@@ -27,6 +27,7 @@ import {
   sendMessage,
   setInsightNotifier,
   setRavelContext,
+  setInternalChildCapacityForTest,
   setRavelRuntimeServicesForTest,
   steerChild,
   archiveDispatch,
@@ -120,6 +121,8 @@ const DEFAULT_WORKTREE_BASE = 'C:/worktrees'
 let worktreeBase = DEFAULT_WORKTREE_BASE
 /** Fires inside createWorktree, to simulate the user acting mid-spawn. */
 let onCreateWorktree: (() => void) | null = null
+/** When set, the next createWorktree throws once — used to exercise fail-start draining. */
+let failNextWorktree = false
 /**
  * Scripted result of the repo's verify command. Return a promise to hold the
  * verdict open, which is how the ordering guarantee is tested; throw to
@@ -196,6 +199,10 @@ function harness(): Fake {
       return fake.script.shift() ?? 'I have nothing to do.'
     },
     createWorktree: async (_repoPath, _branch, opts) => {
+      if (failNextWorktree) {
+        failNextWorktree = false
+        throw new Error('worktree boom')
+      }
       const path = opts?.targetPath ?? `${worktreeBase}/fallback`
       fake.worktrees.push(path)
       if (worktreeBase !== DEFAULT_WORKTREE_BASE) mkdirSync(path, { recursive: true })
@@ -318,6 +325,40 @@ function twoBriefPlan(sourceMessageIds: string[]): Record<string, unknown> {
   return { ...dependent, briefs }
 }
 
+function nineIndependentBriefPlan(sourceMessageIds: string[]): Record<string, unknown> {
+  const base = planProposal(sourceMessageIds)
+  const template = (base.briefs as Record<string, unknown>[])[0]
+  const roles = ['lead-engineer', 'auditor', 'minor-task', 'researcher', 'test-engineer', 'security-engineer', 'performance-engineer', 'release-engineer', 'minor-task']
+  return {
+    ...base,
+    briefs: roles.map((role, index) => ({
+      ...template,
+      id: `brief-${index + 1}`,
+      title: `Independent task ${index + 1}`,
+      role,
+      goal: `Complete independent task ${index + 1}`,
+      dependsOn: []
+    }))
+  }
+}
+/** N independent briefs cycling the specialist vocabulary; used for queue/drain coverage. */
+function independentBriefPlan(sourceMessageIds: string[], count: number): Record<string, unknown> {
+  const base = planProposal(sourceMessageIds)
+  const template = (base.briefs as Record<string, unknown>[])[0]
+  const roles = ['lead-engineer', 'auditor', 'minor-task', 'researcher', 'test-engineer', 'security-engineer', 'performance-engineer', 'release-engineer']
+  return {
+    ...base,
+    briefs: Array.from({ length: count }, (_, index) => ({
+      ...template,
+      id: `brief-${index + 1}`,
+      title: `Independent task ${index + 1}`,
+      role: roles[index % roles.length],
+      goal: `Complete independent task ${index + 1}`,
+      dependsOn: []
+    }))
+  }
+}
+
 let activeRavelId: string | null = null
 
 afterEach(async () => {
@@ -326,11 +367,13 @@ afterEach(async () => {
     activeRavelId = null
   }
   setRavelRuntimeServicesForTest(null)
+  setInternalChildCapacityForTest(null)
   setInsightNotifier(() => {})
   settingsOverride = null
   worktreeBase = DEFAULT_WORKTREE_BASE
   verifyOutcome = () => ({ ok: true, exitCode: 0, stdout: 'ok', stderr: '', ranWith: 'fake' })
   onCreateWorktree = null
+  failNextWorktree = false
 })
 
 describe('Ravel runtime integration (no quota spend)', () => {
@@ -418,6 +461,201 @@ describe('Ravel runtime integration (no quota spend)', () => {
     expect(dispatched.dispatches).toHaveLength(1)
     expect(dispatched.dispatches[0]).toMatchObject({ briefId: 'brief-1', planRevision: 1, status: 'active' })
     expect(getLog(created.ravel.id).some((entry) => entry.event === 'spawn' && entry.level === 'action')).toBe(true)
+  })
+
+  test('queues excess independent briefs and drains the queue as capacity returns', async () => {
+    const fake = harness()
+    // Pin the adaptive capacity so the queue/drain assertions are exact on any host.
+    setInternalChildCapacityForTest(8)
+
+    const created = await createRavel(
+      {
+        name: 'Queue test',
+        repoId: 'repo-1',
+        repoPath: 'C:/repo',
+        harness: 'claude',
+        allowRisky: true
+      },
+      SETTINGS
+    )
+    if (!created.ok) throw new Error('expected create to succeed')
+    activeRavelId = created.ravel.id
+
+    const instruction = await sendMessage(created.ravel.id, 'Run nine independent tasks', SETTINGS)
+    if (!instruction?.ok) throw new Error('expected instruction delivery')
+    const sourceId = instruction.ravel.messages[instruction.ravel.messages.length - 1].id
+    fake.script.push(toolBlock(nineIndependentBriefPlan([sourceId])))
+    const proposed = await sendMessage(created.ravel.id, 'Propose the nine-task plan', SETTINGS)
+    if (!proposed?.ok) throw new Error('expected proposal delivery')
+    expect(proposed.ravel.status).toBe('awaiting-approval')
+
+    fake.script.push(
+      Array.from({ length: 9 }, (_, index) => toolBlock({ tool: 'spawn_child', briefId: `brief-${index + 1}` })).join('') +
+      toolBlock({ tool: 'reply', body: 'All independent tasks are queued or running.' })
+    )
+    const approved = await approvePlan(created.ravel.id, 1, SETTINGS)
+    if (!approved?.ok) throw new Error('expected approval to succeed')
+    await settle()
+
+    expect(fake.created).toHaveLength(8)
+    expect(getLog(created.ravel.id).some((entry) => entry.event === 'spawn-queued')).toBe(true)
+
+    fake.script.push(toolBlock({ tool: 'reply', body: 'One slot is available.' }))
+    onSessionExit(fake.sessions[0].id, { exitCode: 0, outputChars: 128, tail: 'done' })
+    await settle()
+
+    expect(fake.created).toHaveLength(9)
+    expect(getRavel(created.ravel.id)?.dispatches.some((dispatch) => dispatch.briefId === 'brief-9')).toBe(true)
+  })
+
+  test('a nameless create normalizes to Reigen and queues above capacity', async () => {
+    // Capacity 2 with three independent briefs: two run, one queues.
+    const fake = harness()
+    setInternalChildCapacityForTest(2)
+
+    const created = await createRavel(
+      { repoId: 'repo-1', repoPath: 'C:/repo', harness: 'claude', allowRisky: true },
+      SETTINGS
+    )
+    if (!created.ok) throw new Error('expected create to succeed')
+    expect(created.ravel.name).toBe('Reigen')
+    activeRavelId = created.ravel.id
+    const id = created.ravel.id
+
+    const instruction = await sendMessage(id, 'Run three independent tasks', SETTINGS)
+    if (!instruction?.ok) throw new Error('expected instruction delivery')
+    const sourceId = instruction.ravel.messages[instruction.ravel.messages.length - 1].id
+    fake.script.push(toolBlock(independentBriefPlan([sourceId], 3)))
+    await sendMessage(id, 'Propose the three-task plan', SETTINGS)
+
+    fake.script.push(
+      Array.from({ length: 3 }, (_, index) => toolBlock({ tool: 'spawn_child', briefId: `brief-${index + 1}` })).join('') +
+      toolBlock({ tool: 'reply', body: 'Two running, one queued.' })
+    )
+    await approvePlan(id, 1, SETTINGS)
+    await settle()
+
+    expect(fake.created).toHaveLength(2)
+    expect(fake.created.map((req) => req.briefId).sort()).toEqual(['brief-1', 'brief-2'])
+    expect(getLog(id).some((entry) => entry.event === 'spawn-queued')).toBe(true)
+  })
+
+  test('detaching a live child frees its slot and drains the next queued brief', async () => {
+    const fake = harness()
+    setInternalChildCapacityForTest(2)
+
+    const created = await createRavel(
+      { repoId: 'repo-1', repoPath: 'C:/repo', harness: 'claude', allowRisky: true },
+      SETTINGS
+    )
+    if (!created.ok) throw new Error('expected create to succeed')
+    activeRavelId = created.ravel.id
+    const id = created.ravel.id
+
+    const instruction = await sendMessage(id, 'Run three independent tasks', SETTINGS)
+    if (!instruction?.ok) throw new Error('expected instruction delivery')
+    const sourceId = instruction.ravel.messages[instruction.ravel.messages.length - 1].id
+    fake.script.push(toolBlock(independentBriefPlan([sourceId], 3)))
+    await sendMessage(id, 'Propose the three-task plan', SETTINGS)
+
+    fake.script.push(
+      Array.from({ length: 3 }, (_, index) => toolBlock({ tool: 'spawn_child', briefId: `brief-${index + 1}` })).join('') +
+      toolBlock({ tool: 'reply', body: 'Two running, one queued.' })
+    )
+    await approvePlan(id, 1, SETTINGS)
+    await settle()
+    expect(fake.created).toHaveLength(2)
+
+    // Detach (cancel) a live child: its slot reopens and brief-3 advances after the replan turn.
+    fake.script.push(toolBlock({ tool: 'reply', body: 'Replanning around the gap.' }))
+    await detachChild(id, fake.sessions[0].id, SETTINGS)
+    await settle()
+
+    expect(fake.created).toHaveLength(3)
+    expect(fake.created[2].briefId).toBe('brief-3')
+    expect(getRavel(id)?.dispatches.some((dispatch) => dispatch.briefId === 'brief-3' && dispatch.status === 'active')).toBe(true)
+  })
+
+  test('a queued brief drains when the ravel resumes after a pause', async () => {
+    const fake = harness()
+    setInternalChildCapacityForTest(2)
+
+    const created = await createRavel(
+      { repoId: 'repo-1', repoPath: 'C:/repo', harness: 'claude', allowRisky: true },
+      SETTINGS
+    )
+    if (!created.ok) throw new Error('expected create to succeed')
+    activeRavelId = created.ravel.id
+    const id = created.ravel.id
+
+    const instruction = await sendMessage(id, 'Run three independent tasks', SETTINGS)
+    if (!instruction?.ok) throw new Error('expected instruction delivery')
+    const sourceId = instruction.ravel.messages[instruction.ravel.messages.length - 1].id
+    fake.script.push(toolBlock(independentBriefPlan([sourceId], 3)))
+    await sendMessage(id, 'Propose the three-task plan', SETTINGS)
+
+    fake.script.push(
+      Array.from({ length: 3 }, (_, index) => toolBlock({ tool: 'spawn_child', briefId: `brief-${index + 1}` })).join('') +
+      toolBlock({ tool: 'reply', body: 'Two running, one queued.' })
+    )
+    await approvePlan(id, 1, SETTINGS)
+    await settle()
+    expect(fake.created).toHaveLength(2)
+    expect(getLog(id).some((entry) => entry.event === 'spawn-queued')).toBe(true)
+
+    // Pausing interrupts both live children, reopening capacity; brief-3 stays queued.
+    pauseRavel(id)
+    await settle()
+    expect(getRavel(id)?.status).toBe('paused')
+    expect(getRavel(id)?.dispatches.filter((dispatch) => dispatch.status === 'interrupted')).toHaveLength(2)
+
+    // Resume runs the manager turn and then drains the stranded brief into a freed slot.
+    fake.script.push(toolBlock({ tool: 'reply', body: 'Resuming.' }))
+    await resumeRavel(id, SETTINGS)
+    await settle()
+
+    expect(fake.created).toHaveLength(3)
+    expect(fake.created[2].briefId).toBe('brief-3')
+  })
+
+  test('a failed start releases capacity and the queue continues with the next brief', async () => {
+    const fake = harness()
+    setInternalChildCapacityForTest(1)
+
+    const created = await createRavel(
+      { repoId: 'repo-1', repoPath: 'C:/repo', harness: 'claude', allowRisky: true },
+      SETTINGS
+    )
+    if (!created.ok) throw new Error('expected create to succeed')
+    activeRavelId = created.ravel.id
+    const id = created.ravel.id
+
+    const instruction = await sendMessage(id, 'Run three independent tasks', SETTINGS)
+    if (!instruction?.ok) throw new Error('expected instruction delivery')
+    const sourceId = instruction.ravel.messages[instruction.ravel.messages.length - 1].id
+    fake.script.push(toolBlock(independentBriefPlan([sourceId], 3)))
+    await sendMessage(id, 'Propose the three-task plan', SETTINGS)
+
+    fake.script.push(
+      Array.from({ length: 3 }, (_, index) => toolBlock({ tool: 'spawn_child', briefId: `brief-${index + 1}` })).join('') +
+      toolBlock({ tool: 'reply', body: 'One running, two queued.' })
+    )
+    await approvePlan(id, 1, SETTINGS)
+    await settle()
+    // Capacity 1: only brief-1 runs; brief-2 and brief-3 wait.
+    expect(fake.created).toHaveLength(1)
+    expect(getLog(id).some((entry) => entry.event === 'spawn-queued')).toBe(true)
+
+    // The next attempted start fails at worktree creation; the brief after it still launches.
+    failNextWorktree = true
+    fake.script.push(toolBlock({ tool: 'reply', body: 'Continuing.' }))
+    onSessionExit(fake.sessions[0].id, { exitCode: 0, outputChars: 64, tail: 'done' })
+    await settle()
+
+    const dispatches = getRavel(id)?.dispatches ?? []
+    expect(dispatches.find((dispatch) => dispatch.briefId === 'brief-2')?.status).toBe('failed')
+    expect(dispatches.find((dispatch) => dispatch.briefId === 'brief-3')?.status).toBe('active')
+    expect(fake.created.map((req) => req.briefId).sort()).toEqual(['brief-1', 'brief-3'])
   })
 
   test('the manager prompt carries the bounded digest, never the mission or brief bodies', async () => {

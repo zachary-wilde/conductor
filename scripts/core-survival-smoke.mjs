@@ -113,7 +113,7 @@ function readEndpoint() {
 }
 
 /** A minimal authenticated control-channel client for line-delimited JSON calls. */
-function controlClient(port, secret) {
+function controlClient(port, secret, onEvent) {
   const socket = connect(port, '127.0.0.1')
   socket.setEncoding('utf8')
   const responders = new Map()
@@ -139,6 +139,9 @@ function controlClient(port, secret) {
           responders.delete(frame.id)
           frame.ok ? resolveCall(frame.value) : reject(new Error(frame.error ?? 'call failed'))
         }
+        if (authenticated && frame.event === true && onEvent) {
+          onEvent(frame.channel, ...(frame.args ?? []))
+        }
       }
     })
   })
@@ -155,9 +158,9 @@ function controlClient(port, secret) {
   }
 }
 /** Open an authenticated control client, retrying a just-spawned Core that is not yet accepting. */
-async function openControl(port, secret) {
+async function openControl(port, secret, onEvent) {
   for (let attempt = 0; attempt < 40; attempt++) {
-    const client = controlClient(port, secret)
+    const client = controlClient(port, secret, onEvent)
     try {
       await client.ready
       return client
@@ -210,6 +213,21 @@ async function main() {
   })
   const before = await client1.call('session:list')
   check('a live session exists before the window closes', before.some((s) => s.id === session.id), `sessions: ${before.length}`)
+  // Write a deterministic BEFORE line and observe it arrive live through pty:data.
+  // Each event now carries the Core's monotonic generation as its third arg.
+  const beforeSeen = []
+  const beforeObs = controlClient(ep1.controlPort, ep1.secret, (ch, ...a) => {
+    if (ch === 'pty:data' && a[0] === session.id) beforeSeen.push({ data: String(a[1]), generation: a[2] })
+  })
+  await beforeObs.ready
+  await client1.call('session:write', session.id, 'echo BEFORE_REPLAY\r')
+  await waitFor(() => beforeSeen.some((s) => s.data.includes('BEFORE_REPLAY')), 'BEFORE_REPLAY in live output')
+  // Let the full echo (typed line + output) settle so the occurrence-count
+  // baseline is measured the same way as AFTER below.
+  await sleep(300)
+  const beforeCount = beforeSeen.map((s) => s.data).join('').split('BEFORE_REPLAY').length - 1
+  check('BEFORE line observed live before disconnect', beforeCount >= 1, `count=${beforeCount}`)
+  beforeObs.close()
   client1.close()
 
   // 3. Kill Electron ONLY. The detached Core is a descendant of Electron on
@@ -218,6 +236,14 @@ async function main() {
   killProcess(electron.pid)
   electron = null
   await sleep(1500)
+
+  // Write a deterministic DURING line while no event-observing client is
+  // connected. The output must still be captured in the Core's replay buffer.
+  const duringWriter = await openControl(ep1.controlPort, ep1.secret)
+  await duringWriter.call('session:write', session.id, 'echo DURING_REPLAY\r')
+  await sleep(500)
+  duringWriter.close()
+  check('DURING line written while no client subscribed', true)
 
   // 4. The Core and the session must have survived the window closing.
   check('the Core process outlived Electron', pidAlive(corePid), `pid ${corePid}`)
@@ -229,6 +255,53 @@ async function main() {
   check('the session is still live in the Core after the window closed', after.some((s) => s.id === session.id), `sessions: ${after.length}`)
   const repos = await client2.call('repo:list')
   check('durable state (the added repo) survived the window closing', repos.some((r) => r.id === repo.id), `repos: ${repos.length}`)
+
+  // Reattach exactly as the renderer does: subscribe to live pty:data BEFORE
+  // requesting the snapshot. OVERLAP is written while subscribed but before the
+  // snapshot lands, so it is both emitted live AND captured in the replay
+  // buffer — the generation fence must dedupe it (snapshot generation >= the
+  // overlap chunk's live generation).
+  const afterSeen = []
+  const replayObs = controlClient(ep1.controlPort, ep1.secret, (ch, ...a) => {
+    if (ch === 'pty:data' && a[0] === session.id) afterSeen.push({ data: String(a[1]), generation: a[2] })
+  })
+  await replayObs.ready
+  await replayObs.call('session:write', session.id, 'echo OVERLAP_REPLAY\r')
+  const overlap = await waitFor(
+    () => afterSeen.find((s) => s.data.includes('OVERLAP_REPLAY')),
+    'OVERLAP_REPLAY in live output'
+  )
+  check('pty:data events carry a numeric generation', typeof overlap.generation === 'number' && overlap.generation > 0, `gen=${overlap.generation}`)
+  const snap = await replayObs.call('session:snapshot', session.id)
+  check(
+    'snapshot replay buffer contains BEFORE, DURING and OVERLAP',
+    !!snap && snap.buffer.includes('BEFORE_REPLAY') && snap.buffer.includes('DURING_REPLAY') && snap.buffer.includes('OVERLAP_REPLAY'),
+    `gen=${snap?.generation} truncated=${snap?.truncated} len=${snap?.buffer?.length}`
+  )
+  check(
+    'snapshot generation covers the overlap chunk (live gen <= snapshot gen)',
+    !!snap && typeof overlap.generation === 'number' && snap.generation >= overlap.generation,
+    `overlapGen=${overlap.generation} snapGen=${snap?.generation}`
+  )
+  // AFTER is written AFTER the snapshot, so it is not in the buffer and must
+  // arrive live exactly as many times as BEFORE did (identical echo path). This
+  // observes the raw control-channel stream, not the renderer replay gate, so
+  // the smoke proves the Core generation fence data and single live delivery;
+  // terminalReplay.test.ts proves renderer deduplication. Compare occurrence
+  // counts, not just .some().
+  await replayObs.call('session:write', session.id, 'echo AFTER_REPLAY\r')
+  await waitFor(() => afterSeen.some((s) => s.data.includes('AFTER_REPLAY')), 'AFTER_REPLAY in live output')
+  await sleep(300)
+  const afterCount = afterSeen.map((s) => s.data).join('').split('AFTER_REPLAY').length - 1
+  check(
+    'AFTER delivered exactly as many times as BEFORE (no duplication)',
+    afterCount === beforeCount && afterCount >= 1,
+    `before=${beforeCount} after=${afterCount}`
+  )
+  replayObs.close()
+  // No new session was created by the reattach.
+  const finalList = await client2.call('session:list')
+  check('reattach created no new session', finalList.length === after.length && finalList.some((s) => s.id === session.id), `before=${after.length} after=${finalList.length}`)
   client2.close()
 
   // 5. A relaunched Electron must RECONNECT to the same Core, not spawn another.
@@ -252,7 +325,6 @@ main().catch((e) => {
 // The Core is detached, so a stuck smoke would hang CI forever waiting on a
 // socket that never connects. Fail loudly past this ceiling instead. unref'd so
 // it never keeps an otherwise-finished process alive.
-const watchdog = setTimeout(() => fail('survival smoke timed out'), 90_000)
-watchdog.unref()
+const watchdog = setTimeout(() => fail('survival smoke timed out'), 120_000).unref()
 // A detached Core outlives this script, so clean it up on interrupt too.
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => fail(`received ${sig}`))

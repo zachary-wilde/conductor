@@ -30,15 +30,11 @@ interface WorkspaceShellVisibility {
    */
   projectsOpen: boolean
   sessionsOpen: boolean
-  /** Reserved for Task 5's inspector panel; not yet surfaced as UI. */
-  inspectorOpen: boolean
 }
 
 interface WorkspaceShellContextValue extends WorkspaceShellVisibility {
   toggleSessions: (trigger?: HTMLElement | null) => void
   closeSessions: () => void
-  toggleInspector: (trigger?: HTMLElement | null) => void
-  closeInspector: () => void
 }
 
 const WorkspaceShellContext = createContext<WorkspaceShellContextValue | null>(null)
@@ -46,19 +42,14 @@ const WorkspaceShellContext = createContext<WorkspaceShellContextValue | null>(n
 /**
  * Shell visibility, with a standalone default.
  *
- * A session rendered as a floating canvas panel has no surrounding shell to ask,
- * and its inspector is simply always available — so this returns a working value
- * instead of throwing. Throwing was right when the shell was the only way to
- * render a session; it is not any more.
+ * A session rendered as a floating canvas panel has no surrounding shell to ask
+ * about rail visibility, so this returns a working value instead of throwing.
  */
 const STANDALONE: WorkspaceShellContextValue = {
   projectsOpen: false,
   sessionsOpen: false,
-  inspectorOpen: true,
   toggleSessions: () => {},
-  closeSessions: () => {},
-  toggleInspector: () => {},
-  closeInspector: () => {}
+  closeSessions: () => {}
 }
 
 export function useWorkspaceShell(): WorkspaceShellContextValue {
@@ -169,10 +160,10 @@ function RavelStrip({ compact }: { compact: boolean }): JSX.Element {
         onClick={() => toggleNewRavel(true)}
         disabled={repos.length === 0}
         data-testid="new-ravel"
-        title={repos.length === 0 ? 'Add a repository first' : 'New Ravel orchestrator'}
+        title={repos.length === 0 ? 'Add a repository first' : 'New Reigen'}
       >
         <Sparkles size={13} />
-        {!compact && 'New Ravel'}
+        {!compact && 'New Reigen'}
       </button>
       {!compact && <div className="mb-1 mt-3 px-1 label">Roundtables</div>}
       {roundtables.length > 0 && (
@@ -218,8 +209,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }): JSX.Eleme
   }
   const [visibility, setVisibility] = useState<WorkspaceShellVisibility>({
     projectsOpen: true,
-    sessionsOpen: false,
-    inspectorOpen: true
+    sessionsOpen: false
   })
   const allSessions = useStore((s) => s.sessions)
   // Memoized (not inline `.filter()` in the selector) so the count only
@@ -230,10 +220,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }): JSX.Eleme
   )
 
   const isCompact = useMediaQuery('(max-width: 1099px)')
-  const isCompactInspector = useMediaQuery('(max-width: 1279px)')
 
   const restoreFocusRef = useRef<HTMLElement | null>(null)
-  const inspectorRestoreFocusRef = useRef<HTMLElement | null>(null)
 
   const closeSessions = (): void => {
     setVisibility((v) => (v.sessionsOpen ? { ...v, sessionsOpen: false } : v))
@@ -252,43 +240,23 @@ export function WorkspaceShell({ children }: { children: ReactNode }): JSX.Eleme
     else openSessions(trigger)
   }
 
-  const closeInspector = (): void => {
-    setVisibility((v) => (v.inspectorOpen ? { ...v, inspectorOpen: false } : v))
-    const restore = inspectorRestoreFocusRef.current
-    inspectorRestoreFocusRef.current = null
-    if (restore?.isConnected) restore.focus()
-  }
-
-  const toggleInspector = (trigger?: HTMLElement | null): void => {
-    if (visibility.inspectorOpen) {
-      closeInspector()
-    } else {
-      inspectorRestoreFocusRef.current = trigger ?? (document.activeElement as HTMLElement | null)
-      setVisibility((v) => ({ ...v, inspectorOpen: true }))
-    }
-  }
 
   useEffect(() => {
-    if ((!isCompact || !visibility.sessionsOpen) && (!isCompactInspector || !visibility.inspectorOpen)) return
+    if (!isCompact || !visibility.sessionsOpen) return
     const onKey = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || document.querySelector('[role="dialog"]')) return
-      if (isCompact && visibility.sessionsOpen) {
-        event.preventDefault()
-        closeSessions()
-      } else if (isCompactInspector && visibility.inspectorOpen) {
-        event.preventDefault()
-        closeInspector()
-      }
+      event.preventDefault()
+      closeSessions()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isCompact, isCompactInspector, visibility.inspectorOpen, visibility.sessionsOpen])
+  }, [isCompact, visibility.sessionsOpen])
 
   const sessionsEffectivelyOpen = !isCompact || visibility.sessionsOpen
 
   const contextValue = useMemo<WorkspaceShellContextValue>(
-    () => ({ ...visibility, toggleSessions, closeSessions, toggleInspector, closeInspector }),
+    () => ({ ...visibility, toggleSessions, closeSessions }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [visibility]
   )

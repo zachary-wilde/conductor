@@ -157,7 +157,7 @@ export function CanvasBar(): JSX.Element {
         style={noDrag}
         data-testid="new-ravel"
         disabled={repos.length === 0}
-        title={repos.length === 0 ? 'Add a repository first' : 'New Ravel orchestrator'}
+        title={repos.length === 0 ? 'Add a repository first' : 'New Reigen'}
         onClick={() => toggleNewRavel(true)}
         className="flex h-[26px] items-center gap-1.5 rounded-lg px-3 text-[11.5px] text-text-low hover:text-text-mid disabled:cursor-not-allowed disabled:opacity-40"
       >

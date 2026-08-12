@@ -1,0 +1,31 @@
+/* Shared visual tokens for the Electron renderer and Capacitor web UI. */
+:root {
+  /* Flat palette. Channels stay space-separated for Tailwind opacity modifiers. */
+  --bg-0: 10 10 11;
+  --bg-1: 17 17 19;
+  --bg-2: 22 22 24;
+  --bg-3: 29 29 32;
+  --edge: 38 38 43;
+  --edge-mid: 44 44 51;
+  --edge-active: 58 58 68;
+  --accent: 139 124 246;
+  --success: 61 220 151;
+  --warn: 245 158 11;
+  --danger: 248 113 113;
+  --text-hi: 245 245 247;
+  --text-mid: 161 161 170;
+  --text-low: 107 107 118;
+  --text-hint: 74 74 85;
+
+  /* Existing control conventions shared by both shells. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --control-height: 36px;
+
+  /* Existing semantic aliases used by Tailwind utilities. */
+  --accent-blue: 37 99 235;
+  --accent-green: var(--success);
+  --accent-cyan: 50 212 222;
+  --accent-purple: 139 124 246;
+}

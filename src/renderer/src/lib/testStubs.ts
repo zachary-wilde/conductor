@@ -80,6 +80,7 @@ export function installApi(overrides: Partial<Window['api']> = {}): void {
       kind: 'normal'
     }),
     killSession: vi.fn().mockResolvedValue(true),
+    snapshotSession: vi.fn().mockResolvedValue(null),
     writeToSession: vi.fn().mockResolvedValue(true),
     resizeSession: vi.fn().mockResolvedValue(true),
     getSettings: vi.fn().mockResolvedValue({ ...DEFAULT_SETTINGS }),
@@ -139,7 +140,12 @@ export function installApi(overrides: Partial<Window['api']> = {}): void {
     onInsight: vi.fn().mockReturnValue(vi.fn()),
     getCoreStatus: vi.fn().mockResolvedValue({ state: 'connecting' }),
     onCoreStatus: vi.fn().mockReturnValue(vi.fn()),
-    reconnectCore: vi.fn().mockResolvedValue(undefined)
+    reconnectCore: vi.fn().mockResolvedValue(undefined),
+    updaterStatus: vi.fn().mockResolvedValue({ state: 'idle' }),
+    checkForUpdates: vi.fn().mockResolvedValue({ state: 'idle' }),
+    downloadUpdate: vi.fn().mockResolvedValue({ state: 'idle' }),
+    installUpdate: vi.fn().mockResolvedValue({ state: 'idle' }),
+    onUpdaterStatus: vi.fn().mockReturnValue(vi.fn())
   }
   Object.assign(api, overrides)
   if (typeof globalThis.window === 'undefined') {

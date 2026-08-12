@@ -24,26 +24,32 @@ beforeEach(() => {
 
 afterEach(cleanup)
 
-describe('NewRavelModal auto-approve (allowRisky) toggle', () => {
-  test('defaults off and creates a Ravel with allowRisky false', async () => {
+describe('NewRavelModal creation contract', () => {
+  test('creates Reigen without user-configurable name or child limit', async () => {
     const user = userEvent.setup()
     render(<NewRavelModal />)
 
-    await user.type(screen.getByLabelText('Name'), 'My Ravel')
-    await user.click(screen.getByRole('button', { name: /create ravel/i }))
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+    expect(screen.queryByText('Max children')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /create reigen/i }))
 
     expect(window.api.createRavel).toHaveBeenCalledWith(
-      expect.objectContaining({ allowRisky: false })
+      expect.not.objectContaining({ maxChildren: expect.anything() })
+    )
+    expect(window.api.createRavel).toHaveBeenCalledWith(
+      expect.not.objectContaining({ name: expect.anything() })
+    )
+    expect(window.api.createRavel).toHaveBeenCalledWith(
+      expect.objectContaining({ repoId: 'repo-1', repoPath: 'D:/repo', harness: 'claude', allowRisky: false })
     )
   })
 
-  test('enabling it creates a Ravel with allowRisky true', async () => {
+  test('enabling autonomy creates Reigen with allowRisky true', async () => {
     const user = userEvent.setup()
     render(<NewRavelModal />)
 
-    await user.type(screen.getByLabelText('Name'), 'My Ravel')
     await user.click(screen.getByTestId('ravel-allow-risky'))
-    await user.click(screen.getByRole('button', { name: /create ravel/i }))
+    await user.click(screen.getByRole('button', { name: /create reigen/i }))
 
     expect(window.api.createRavel).toHaveBeenCalledWith(
       expect.objectContaining({ allowRisky: true })

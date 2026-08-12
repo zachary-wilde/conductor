@@ -4,7 +4,8 @@
 // `confirmed:true`; `message` opens a composer. Every command is disabled while
 // the core is read-only (incompatible handshake).
 
-import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ChevronLeft, Send } from 'lucide-react'
 import type { WorkerDetailView as WorkerDetail } from '@ops/api-contract'
@@ -14,8 +15,9 @@ import { useCore } from '../state/coreContext'
 import { workerControl } from '../viewmodel/commands'
 import { detachConfirmCopy, type DetachConfirmCopy } from '../viewmodel/detachConfirm'
 import { Badge, Button, Notice, Spinner, TextArea } from '../components/ui'
+import { DetailsSheet } from '../components/DetailsSheet'
+import { useTabletCanvasOverlay } from '../components/TabletCanvas'
 import { EventRow } from '../components/EventRow'
-
 type BtnVariant = 'primary' | 'ghost' | 'danger' | 'success'
 
 const ACTION_META: Record<WorkerControlAction, { label: string; variant: BtnVariant }> = {
@@ -40,6 +42,7 @@ export function WorkerDetailView({
   workerId: string
   onBack: () => void
 }): JSX.Element {
+  const overlayTarget = useTabletCanvasOverlay()
   const { client, compatible } = useCore()
   const [detail, setDetail] = useState<WorkerDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -48,6 +51,8 @@ export function WorkerDetailView({
   const [pending, setPending] = useState<WorkerControlAction | null>(null)
   const [confirming, setConfirming] = useState<WorkerControlAction | null>(null)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsButtonRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -65,6 +70,7 @@ export function WorkerDetailView({
   }, [client, workerId])
 
   useEffect(() => load(), [load])
+  useEffect(() => setDetailsOpen(false), [workerId])
 
   async function run(
     action: WorkerControlAction,
@@ -98,10 +104,22 @@ export function WorkerDetailView({
 
   const controls = detail ? detail.availableControls : []
   const canMessage = controls.includes('message')
+  const detailsSheet =
+    detailsOpen && detail ? (
+      <DetailsSheet
+        open
+        onClose={() => setDetailsOpen(false)}
+        worker={detail}
+        events={detail.latestEvents}
+        controls={detail.availableControls}
+        readOnly={!compatible}
+        restoreFocusRef={detailsButtonRef}
+      />
+    ) : null
   const otherControls = controls.filter((a) => a !== 'message')
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="relative flex min-h-0 flex-1 flex-col gap-4">
       <button
         onClick={onBack}
         className="inline-flex w-fit items-center gap-1 text-xs text-text-low transition-colors hover:text-text-hi"
@@ -113,6 +131,17 @@ export function WorkerDetailView({
         <h1 className="font-mono text-sm text-text-hi">{workerId}</h1>
         {detail ? (
           <Badge className="bg-bg-3 text-text-mid">{detail.controlState.lifecycle}</Badge>
+        ) : null}
+        {detail ? (
+          <Button
+            ref={detailsButtonRef}
+            variant="ghost"
+            className="ml-auto px-2 py-1 text-xs"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen(true)}
+          >
+            Details
+          </Button>
         ) : null}
       </div>
 
@@ -146,7 +175,7 @@ export function WorkerDetailView({
                 {detail.controlState.responseInFlight ? 'in flight' : 'idle'}
               </Stat>
               <Stat k="dependents">{detail.controlState.dependentCount}</Stat>
-              <Stat k="parent ravel">
+              <Stat k="parent workflow">
                 {detail.controlState.hasParentRavel ? 'yes' : 'no'}
               </Stat>
             </dl>
@@ -264,6 +293,7 @@ export function WorkerDetailView({
               </div>
             )}
           </section>
+          {detailsSheet ? (overlayTarget ? createPortal(detailsSheet, overlayTarget) : detailsSheet) : null}
         </>
       ) : null}
     </div>

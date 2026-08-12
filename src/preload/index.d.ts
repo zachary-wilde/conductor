@@ -19,11 +19,30 @@ import type {
   SessionActivityEntry,
   Repo,
   Session,
+  SessionSnapshot,
   SessionStatus,
   Settings,
   UpdateRavelBriefAssignmentRequest,
   WorktreeInfo
 } from '../shared/types'
+
+export interface UpdaterStatus {
+  state:
+    | 'idle'
+    | 'checking'
+    | 'available'
+    | 'downloading'
+    | 'downloaded'
+    | 'not-available'
+    | 'error'
+    | 'unsupported'
+  version?: string
+  percent?: number
+  transferred?: number
+  total?: number
+  bytesPerSecond?: number
+  error?: string
+}
 
 export interface HookResultEvent {
   worktreePath: string
@@ -84,6 +103,7 @@ export interface ConductorApi {
   writeToSession: (id: string, data: string) => Promise<boolean>
   resizeSession: (id: string, cols: number, rows: number) => Promise<boolean>
   killSession: (id: string) => Promise<boolean>
+  snapshotSession: (id: string) => Promise<SessionSnapshot | null>
 
   getSettings: () => Promise<Settings>
   saveSettings: (patch: Partial<Settings>) => Promise<Settings>
@@ -102,7 +122,7 @@ export interface ConductorApi {
   closeWindow: () => Promise<void>
   listDir: (p: string) => Promise<{ name: string; path: string; isDir: boolean }[]>
 
-  onPtyData: (cb: (sessionId: string, data: string) => void) => () => void
+  onPtyData: (cb: (sessionId: string, data: string, generation: number) => void) => () => void
   onPtyExit: (cb: (sessionId: string, code: number) => void) => () => void
   onStatusChange: (cb: (sessionId: string, status: SessionStatus) => void) => () => void
   onHookResult: (cb: (info: HookResultEvent) => void) => () => void
@@ -159,6 +179,11 @@ export interface ConductorApi {
   onRavelUpdate: (cb: (cfg: PublicRavelConfig) => void) => () => void
   onRavelLog: (cb: (entry: RavelLogEntry) => void) => () => void
   onRavelChildren: (cb: (ravelId: string) => void) => () => void
+  updaterStatus: () => Promise<UpdaterStatus>
+  checkForUpdates: () => Promise<UpdaterStatus>
+  downloadUpdate: () => Promise<UpdaterStatus>
+  installUpdate: (confirmWithActiveSessions?: boolean) => Promise<UpdaterStatus>
+  onUpdaterStatus: (cb: (status: UpdaterStatus) => void) => () => void
 }
 
 declare global {
